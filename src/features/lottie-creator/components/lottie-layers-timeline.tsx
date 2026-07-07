@@ -27,7 +27,8 @@
  * folders are just extra rows. Group-diamond drag-retime, shift-range select
  * and alt-duplicate are deferred.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronDown, ChevronRight, Diamond, FolderOpen, Plus } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -328,7 +329,7 @@ interface LayerRowProps {
   onSegmentDragEnd: () => void
 }
 
-function LayerRow({
+function LayerRowImpl({
   item,
   index,
   depth,
@@ -607,7 +608,15 @@ interface FolderRowProps {
   frameToX: (frame: number) => number
 }
 
-function FolderRow({ name, depth, from, duration, collapsed, onToggle, frameToX }: FolderRowProps) {
+function FolderRowImpl({
+  name,
+  depth,
+  from,
+  duration,
+  collapsed,
+  onToggle,
+  frameToX,
+}: FolderRowProps) {
   const left = frameToX(from)
   const width = Math.max(2, frameToX(from + duration) - left)
   return (
@@ -646,6 +655,12 @@ function FolderRow({ name, depth, from, duration, collapsed, onToggle, frameToX 
     </div>
   )
 }
+
+// Memoized so a parent re-render (playhead tick, selection, collapse) only
+// re-renders the rows whose props actually changed — with virtualization only a
+// viewport's worth mount, so re-commit cost stays flat as layer count grows.
+const LayerRow = memo(LayerRowImpl)
+const FolderRow = memo(FolderRowImpl)
 
 export function LottieLayersTimeline({
   comp,
@@ -869,6 +884,23 @@ export function LottieLayersTimeline({
   )
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+
+  // Virtualize the rows so only a viewport's worth mount — entering a comp with
+  // hundreds of layers no longer reconciles (and re-commits) every row. Row
+  // heights are dynamic (a layer expands to show its keyframe tracks), so we let
+  // the virtualizer measure them; the marquee geometry below independently walks
+  // ALL rows in the same contiguous content-Y space, so hit-testing is unaffected.
+  const rowVirtualizer = useVirtualizer({
+    count: visualRows.length,
+    getScrollElement: () => scrollAreaRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+    getItemKey: (index) => {
+      const row = visualRows[index]
+      if (!row) return index
+      return row.kind === 'folder' ? `folder:${row.trackId}` : row.item.id
+    },
+  })
 
   // Marquee geometry: walk the rendered row layout once to place every keyframe
   // in the same content coordinate space the marquee drags in — x from
@@ -1314,69 +1346,83 @@ export function LottieLayersTimeline({
           // Empty content-lane pointer-downs bubble here to start a marquee;
           // diamonds/bars stopPropagation, and the clientX gate excludes the
           // outliner column.
-          <div className="relative min-h-full" onPointerDown={handleTimelineBackgroundPointerDown}>
-            {visualRows.map((row, index) =>
-              row.kind === 'folder' ? (
-                <LayerRowContextMenu
-                  key={`folder:${row.trackId}`}
-                  menu={menu}
-                  isFolder
-                  folderTrackId={row.trackId}
-                  canUngroup
+          <div
+            className="relative"
+            style={{ minHeight: '100%', height: rowVirtualizer.getTotalSize() }}
+            onPointerDown={handleTimelineBackgroundPointerDown}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = visualRows[virtualRow.index]
+              if (!row) return null
+              return (
+                <div
+                  key={virtualRow.key}
+                  ref={rowVirtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  className="absolute top-0 right-0 left-0"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  <div>
-                    <FolderRow
-                      name={row.name}
-                      depth={row.depth}
-                      from={row.from}
-                      duration={row.duration}
-                      collapsed={collapsedFolders.has(row.trackId)}
-                      onToggle={() => toggleFolder(row.trackId)}
-                      frameToX={frameToX}
-                    />
-                  </div>
-                </LayerRowContextMenu>
-              ) : (
-                <LayerRowContextMenu
-                  key={row.item.id}
-                  menu={menu}
-                  isFolder={false}
-                  folderTrackId=""
-                  canUngroup={row.depth > 0}
-                >
-                  <div>
-                    <LayerRow
-                      item={row.item}
-                      index={index}
-                      depth={row.depth}
-                      compDuration={comp.durationInFrames}
-                      viewport={viewport}
-                      timelineWidth={timelineWidth}
-                      frameToX={frameToX}
-                      ticks={tickFrames}
-                      getRenderedKeyframeX={getRenderedKeyframeX}
-                      itemKeyframes={keyframesByItemId[row.item.id]}
-                      isSelected={selectedItemIdSet.has(row.item.id)}
-                      onSelectLayer={handleSelectLayer}
-                      isCollapsed={collapsedByItemId.get(row.item.id) ?? false}
-                      onToggleCollapse={toggleCollapse}
-                      collapsedGroups={collapsedGroups}
-                      onToggleGroupCollapse={toggleGroupCollapse}
-                      onToggleGroupKeyframes={toggleGroupKeyframes}
-                      onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
-                      playheadFrame={currentFrame}
-                      onToggleKeyframe={toggleKeyframeAtPlayhead}
-                      selectedKeyframes={selectedKeyframes}
-                      onKeyframePointerDown={handleKeyframePointerDown}
-                      previewByItemId={previewByItemId}
-                      onSegmentEasingChange={handleSegmentEasingChange}
-                      onSegmentDragStart={handleSegmentDragStart}
-                      onSegmentDragEnd={handleSegmentDragEnd}
-                    />
-                  </div>
-                </LayerRowContextMenu>
-              ),
-            )}
+                  {row.kind === 'folder' ? (
+                    <LayerRowContextMenu
+                      menu={menu}
+                      isFolder
+                      folderTrackId={row.trackId}
+                      canUngroup
+                    >
+                      <div>
+                        <FolderRow
+                          name={row.name}
+                          depth={row.depth}
+                          from={row.from}
+                          duration={row.duration}
+                          collapsed={collapsedFolders.has(row.trackId)}
+                          onToggle={() => toggleFolder(row.trackId)}
+                          frameToX={frameToX}
+                        />
+                      </div>
+                    </LayerRowContextMenu>
+                  ) : (
+                    <LayerRowContextMenu
+                      menu={menu}
+                      isFolder={false}
+                      folderTrackId=""
+                      canUngroup={row.depth > 0}
+                    >
+                      <div>
+                        <LayerRow
+                          item={row.item}
+                          index={virtualRow.index}
+                          depth={row.depth}
+                          compDuration={comp.durationInFrames}
+                          viewport={viewport}
+                          timelineWidth={timelineWidth}
+                          frameToX={frameToX}
+                          ticks={tickFrames}
+                          getRenderedKeyframeX={getRenderedKeyframeX}
+                          itemKeyframes={keyframesByItemId[row.item.id]}
+                          isSelected={selectedItemIdSet.has(row.item.id)}
+                          onSelectLayer={handleSelectLayer}
+                          isCollapsed={collapsedByItemId.get(row.item.id) ?? false}
+                          onToggleCollapse={toggleCollapse}
+                          collapsedGroups={collapsedGroups}
+                          onToggleGroupCollapse={toggleGroupCollapse}
+                          onToggleGroupKeyframes={toggleGroupKeyframes}
+                          onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
+                          playheadFrame={currentFrame}
+                          onToggleKeyframe={toggleKeyframeAtPlayhead}
+                          selectedKeyframes={selectedKeyframes}
+                          onKeyframePointerDown={handleKeyframePointerDown}
+                          previewByItemId={previewByItemId}
+                          onSegmentEasingChange={handleSegmentEasingChange}
+                          onSegmentDragStart={handleSegmentDragStart}
+                          onSegmentDragEnd={handleSegmentDragEnd}
+                        />
+                      </div>
+                    </LayerRowContextMenu>
+                  )}
+                </div>
+              )
+            })}
 
             {marqueeRect && !marqueeJustEndedRef.current && (
               <KeyframeMarqueeOverlay

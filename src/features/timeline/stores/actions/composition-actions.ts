@@ -9,8 +9,13 @@ import type {
   CompositionItem,
   LottieItem,
 } from '@/types/timeline'
+import type { ItemKeyframes } from '@/types/keyframe'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { buildLottieDocument } from '@/infrastructure/lottie/export'
+import { decomposeLottieDocument, type LottieImportWarning } from '@/infrastructure/lottie/import'
+import { fetchLottieAnimation } from '@/infrastructure/lottie/lottie-metadata'
+import { CREATOR_FONT } from '@/infrastructure/lottie/creator-font'
+import { resolveMediaUrl } from '../../deps/media-library-resolver'
 import {
   createClassicTrack,
   findNearestTrackByKind,
@@ -1222,6 +1227,128 @@ export function openComposition(compositionId: string, label?: string, entryItem
   const name =
     label ?? useCompositionsStore.getState().getComposition(compositionId)?.name ?? 'Composition'
   useCompositionNavigationStore.getState().enterComposition(compositionId, name, entryItemId)
+}
+
+/**
+ * Convert an imported (rasterized) Lottie clip into an editable creator
+ * composition: decompose its Lottie JSON into shape/text layers + folders, wrap
+ * them in a `kind:'lottie'` sub-composition, repoint the clip at it, and drill
+ * in to author it. If the clip is ALREADY a creator Lottie (references a
+ * `kind:'lottie'` composition), this just re-enters it. The clip keeps its
+ * timeline placement (from / duration / transform); only its source is rebaked.
+ *
+ * Returns the decompose warnings so the caller can surface what didn't survive
+ * the round-trip, or `null` if the clip's Lottie JSON couldn't be read.
+ */
+export async function editLottieAsLayers(
+  itemId: string,
+): Promise<{ compositionId: string; warnings: LottieImportWarning[] } | null> {
+  const item = useItemsStore.getState().items.find((i) => i.id === itemId)
+  if (!item || item.type !== 'lottie') return null
+
+  // Already an editable creator comp — just open it.
+  const existing = item.compositionId
+    ? useCompositionsStore.getState().getComposition(item.compositionId)
+    : undefined
+  if (existing?.kind === 'lottie' && item.compositionId) {
+    openComposition(item.compositionId, item.label)
+    return { compositionId: item.compositionId, warnings: [] }
+  }
+
+  // Resolve the clip's Lottie JSON (library media first, else the item's src).
+  let url = item.src
+  if (item.mediaId) {
+    const resolved = await resolveMediaUrl(item.mediaId).catch(() => '')
+    if (resolved) url = resolved
+  }
+  const animation = await fetchLottieAnimation(url, true, item.animationId)
+  if (!animation) return null
+
+  const scene = decomposeLottieDocument(animation)
+  const compId = crypto.randomUUID()
+  const name = item.label?.trim() || scene.name
+
+  // The decomposer yields one track per layer; guard the pathological no-layer
+  // case so the creator always has a track to author on.
+  const tracks: TimelineTrack[] =
+    scene.tracks.length > 0
+      ? scene.tracks
+      : [
+          {
+            id: `track-${crypto.randomUUID()}`,
+            name: 'Layers',
+            height: DEFAULT_TRACK_HEIGHT,
+            locked: false,
+            syncLock: true,
+            visible: true,
+            muted: false,
+            solo: false,
+            order: 0,
+            items: [],
+          },
+        ]
+
+  const composition: SubComposition = {
+    id: compId,
+    name,
+    kind: 'lottie',
+    items: scene.items,
+    tracks,
+    transitions: [],
+    keyframes: scene.keyframes,
+    fps: scene.fps,
+    width: scene.width,
+    height: scene.height,
+    durationInFrames: scene.durationInFrames,
+  }
+
+  // Rebake the wrapper's preview src from the decomposed layers. Flattened is
+  // fine here — a folder is a 1:1 precomp overlay, so the raster preview is
+  // identical whether nested or flat.
+  const keyframesById: Record<string, ItemKeyframes> = {}
+  for (const k of scene.keyframes) keyframesById[k.itemId] = k
+  const { document } = buildLottieDocument(scene.items, {
+    fps: scene.fps,
+    width: scene.width,
+    height: scene.height,
+    durationInFrames: scene.durationInFrames,
+    name,
+    fontName: CREATOR_FONT,
+    keyframes: keyframesById,
+  })
+  const src = URL.createObjectURL(
+    new Blob([JSON.stringify(document)], { type: 'application/json' }),
+  )
+
+  const wrapperUpdates: Partial<LottieItem> = {
+    compositionId: compId,
+    src,
+    totalFrames: scene.durationInFrames,
+    frameRate: scene.fps,
+    sourceWidth: scene.width,
+    sourceHeight: scene.height,
+    // Override records were keyed to the imported file's layers and no longer
+    // apply now that the clip is authored from the decomposed layers.
+    textOverrides: undefined,
+    colorOverrides: undefined,
+    slotOverrides: undefined,
+    themeId: undefined,
+    animationId: undefined,
+  }
+
+  execute(
+    'EDIT_LOTTIE_AS_LAYERS',
+    () => {
+      useCompositionsStore.getState().addComposition(composition)
+      useItemsStore.getState()._updateItem(itemId, wrapperUpdates)
+      useSelectionStore.getState().selectItems([itemId])
+    },
+    { compositionId: compId },
+  )
+
+  useTimelineSettingsStore.getState().markDirty()
+  openComposition(compId, name)
+  return { compositionId: compId, warnings: scene.warnings }
 }
 
 /** Promote an existing composition (compound clip) to a standalone tab and open it. */

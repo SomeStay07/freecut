@@ -81,10 +81,12 @@ type CaptionActionsProps = ItemContextMenuSectionProps & {
 
 type CompositionActionsProps = ItemContextMenuSectionProps & {
   isCompositionItem?: boolean
+  isLottieItem?: boolean
   canCreatePreComp?: boolean
   onEnterComposition?: () => void
   onDissolveComposition?: () => void
   onCreatePreComp?: () => void
+  onEditLottie?: () => void
 }
 
 type MediaActionsProps = ItemContextMenuSectionProps & {
@@ -656,19 +658,27 @@ function CaptionActions({
 function CompositionActions({
   t,
   isCompositionItem,
+  isLottieItem,
   canCreatePreComp,
   onEnterComposition,
   onDissolveComposition,
   onCreatePreComp,
+  onEditLottie,
 }: CompositionActionsProps) {
   const hasCompositionActions =
     (isCompositionItem && (onEnterComposition || onDissolveComposition)) ||
-    (canCreatePreComp && onCreatePreComp)
+    (canCreatePreComp && onCreatePreComp) ||
+    (isLottieItem && onEditLottie)
 
   if (!hasCompositionActions) return null
 
   return (
     <>
+      {isLottieItem && onEditLottie && (
+        <ContextMenuItem onClick={onEditLottie}>
+          {t('timeline.contextMenu.editLottie')}
+        </ContextMenuItem>
+      )}
       {isCompositionItem && onEnterComposition && (
         <ContextMenuItem onClick={onEnterComposition}>
           {t('timeline.contextMenu.openCompoundClip')}

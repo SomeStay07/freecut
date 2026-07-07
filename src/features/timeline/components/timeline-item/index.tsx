@@ -637,6 +637,8 @@ export const TimelineItem = memo(function TimelineItem({
     hasSpeakableText,
     isSceneDetectionActive,
     isCompositionItem,
+    isLottieItem,
+    handleEditLottie,
     handleJoinSelected,
     handleJoinLeft,
     handleJoinRight,
@@ -899,10 +901,12 @@ export const TimelineItem = memo(function TimelineItem({
         }}
         compositionActions={{
           isCompositionItem,
+          isLottieItem,
           onEnterComposition: handleEnterComposition,
           onDissolveComposition: handleDissolveComposition,
           canCreatePreComp: isSelected,
           onCreatePreComp: handleCreatePreComp,
+          onEditLottie: handleEditLottie,
         }}
         sceneDetectionActions={{
           canDetectScenes: item.type === 'video' && !!item.mediaId && !isBroken,

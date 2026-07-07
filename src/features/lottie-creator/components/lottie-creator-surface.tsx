@@ -467,7 +467,7 @@ export function LottieCreatorSurface({
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <div className="flex min-h-0 flex-1 flex-col p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 <span className="flex-1">Layers</span>
                 <span className="normal-case text-[10px] text-muted-foreground/50">

@@ -28,7 +28,12 @@ import {
   splitItemAtFrames,
   unlinkItems,
 } from '../../stores/actions/item-actions'
-import { createPreComp, dissolvePreComp, openComposition } from '../../stores/actions/composition-actions'
+import {
+  createPreComp,
+  dissolvePreComp,
+  editLottieAsLayers,
+  openComposition,
+} from '../../stores/actions/composition-actions'
 import {
   type TimelineItemOverlay,
   useTimelineItemOverlayStore,
@@ -338,6 +343,25 @@ export function useTimelineItemActions({
     dissolvePreComp(item.id)
   }, [isCompositionItem, item.id])
 
+  const isLottieItem = item.type === 'lottie'
+  const handleEditLottie = useCallback(() => {
+    if (item.type !== 'lottie') return
+    // Resolve + decompose is async; capture the id now, surface the result later.
+    const id = item.id
+    void (async () => {
+      const result = await editLottieAsLayers(id)
+      if (!result) {
+        toast.error(i18n.t('timeline.contextMenu.editLottieFailed'))
+        return
+      }
+      if (result.warnings.length > 0) {
+        toast.warning(
+          i18n.t('timeline.contextMenu.editLottieWarnings', { count: result.warnings.length }),
+        )
+      }
+    })()
+  }, [item.type, item.id])
+
   const sceneDetectionAbortRef = useRef<AbortController | null>(null)
   const [isRemovingSilence, setIsRemovingSilence] = useState(false)
   const [isRemovingFillers, setIsRemovingFillers] = useState(false)
@@ -609,6 +633,8 @@ export function useTimelineItemActions({
     isRemovingSilence,
     isRemovingFillers,
     isCompositionItem,
+    isLottieItem,
+    handleEditLottie,
     handleJoinSelected,
     handleJoinLeft,
     handleJoinRight,
