@@ -14,32 +14,12 @@
 import { useRef } from 'react'
 import { ChevronDown, ChevronRight, FolderOpen, Ungroup, Trash2 } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu'
 import type { LayerTreeNode } from '../utils/folder-tree'
 import type { DropTarget } from '../utils/reorder-tree'
 import { useLayerTreeDnd, TREE_INDENT_PX } from '../hooks/use-layer-tree-dnd'
+import { LayerRowContextMenu, type LayerTreeMenuActions } from './layer-row-context-menu'
 
 const BASE_PADDING_PX = 8
-
-/** Selection-aware actions the row context menu invokes. */
-export interface LayerTreeMenuActions {
-  selectedCount: number
-  canPaste: boolean
-  groupSelection: () => void
-  ungroupFolder: (folderTrackId: string) => void
-  ungroupSelection: () => void
-  copy: () => void
-  paste: () => void
-  duplicate: () => void
-  remove: () => void
-}
 
 interface CreatorLayerTreeProps {
   nodes: LayerTreeNode[]
@@ -64,62 +44,6 @@ function stopPointer(event: React.PointerEvent) {
   event.stopPropagation()
 }
 
-/** Wraps a row in the standard Group/Ungroup/Copy/Paste/Duplicate/Delete menu. */
-function RowContextMenu({
-  menu,
-  isFolder,
-  folderTrackId,
-  canUngroup,
-  children,
-}: {
-  menu: LayerTreeMenuActions
-  isFolder: boolean
-  folderTrackId: string
-  canUngroup: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-44">
-        <ContextMenuItem disabled={menu.selectedCount < 2} onSelect={menu.groupSelection}>
-          Group
-          <ContextMenuShortcut>Ctrl+G</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={!canUngroup}
-          onSelect={() => (isFolder ? menu.ungroupFolder(folderTrackId) : menu.ungroupSelection())}
-        >
-          Ungroup
-          <ContextMenuShortcut>Ctrl+Shift+G</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem disabled={menu.selectedCount === 0} onSelect={menu.copy}>
-          Copy
-          <ContextMenuShortcut>Ctrl+C</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuItem disabled={!menu.canPaste} onSelect={menu.paste}>
-          Paste
-          <ContextMenuShortcut>Ctrl+V</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuItem disabled={menu.selectedCount === 0} onSelect={menu.duplicate}>
-          Duplicate
-          <ContextMenuShortcut>Ctrl+D</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          disabled={menu.selectedCount === 0}
-          onSelect={menu.remove}
-          className="text-destructive focus:text-destructive"
-        >
-          Delete
-          <ContextMenuShortcut>Del</ContextMenuShortcut>
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-  )
-}
-
 function LayerTreeNodes({
   nodes,
   depth,
@@ -141,7 +65,7 @@ function LayerTreeNodes({
           const collapsed = collapsedFolders.has(node.trackId)
           return (
             <li key={node.trackId}>
-              <RowContextMenu menu={menu} isFolder folderTrackId={node.trackId} canUngroup>
+              <LayerRowContextMenu menu={menu} isFolder folderTrackId={node.trackId} canUngroup>
                 <div
                   data-track-id={node.trackId}
                   data-depth={depth}
@@ -179,7 +103,7 @@ function LayerTreeNodes({
                     <Ungroup className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              </RowContextMenu>
+              </LayerRowContextMenu>
               {!collapsed && node.children.length > 0 && (
                 <LayerTreeNodes
                   nodes={node.children}
@@ -204,7 +128,12 @@ function LayerTreeNodes({
         const isSelected = selectedIds.has(item.id)
         return (
           <li key={item.id}>
-            <RowContextMenu menu={menu} isFolder={false} folderTrackId="" canUngroup={depth > 0}>
+            <LayerRowContextMenu
+              menu={menu}
+              isFolder={false}
+              folderTrackId=""
+              canUngroup={depth > 0}
+            >
               <div
                 data-track-id={node.trackId}
                 data-depth={depth}
@@ -240,7 +169,7 @@ function LayerTreeNodes({
                   }}
                 />
               </div>
-            </RowContextMenu>
+            </LayerRowContextMenu>
           </li>
         )
       })}

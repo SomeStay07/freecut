@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { buildLottieDocument } from '@/infrastructure/lottie/export'
 import { CREATOR_FONT } from '../utils/creator-font'
 import { useCompositionCreatorController } from '../hooks/use-composition-creator-controller'
+import { useLayerMenu } from '../hooks/use-layer-menu'
 import { LottieCreatorSurface } from './lottie-creator-surface'
 import { LottieLayersTimeline } from './lottie-layers-timeline'
 import {
@@ -43,6 +44,7 @@ export function LottieCompositionWorkspace() {
   // Hooks must run unconditionally — a null-ish composition still needs a
   // controller so the surface can render an empty state.
   const controller = useCompositionCreatorController(comp ?? EMPTY_COMPOSITION)
+  const layerMenu = useLayerMenu(controller)
 
   if (!comp) return null
 
@@ -95,7 +97,7 @@ export function LottieCompositionWorkspace() {
           Done
         </Button>
       )}
-      renderDock={() => <LottieLayersTimeline comp={comp} />}
+      renderDock={() => <LottieLayersTimeline comp={comp} menu={layerMenu} />}
     />
   )
 }

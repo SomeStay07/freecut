@@ -39,8 +39,8 @@ import { CREATOR_FONT, ensureCreatorFont } from '../utils/creator-font'
 import { LottieLivePreview } from './lottie-live-preview'
 import { CreatorTransformGizmo } from './creator-transform-gizmo'
 import { CreatorLayerHitAreas } from './creator-layer-hit-areas'
-import { CreatorLayerTree, type LayerTreeMenuActions } from './creator-layer-tree'
-import { useCreatorClipboardStore } from '../stores/creator-clipboard'
+import { CreatorLayerTree } from './creator-layer-tree'
+import { useLayerMenu } from '../hooks/use-layer-menu'
 import { TemplateGallery, type TemplateDocument } from './template-gallery'
 
 /** The built Lottie document handed to the header slots. */
@@ -332,21 +332,7 @@ export function LottieCreatorSurface({
       return next
     })
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
-  const clipboardHasLayers = useCreatorClipboardStore((s) => s.layers.length > 0)
-  const layerMenu = useMemo<LayerTreeMenuActions>(
-    () => ({
-      selectedCount: selectedIds.length,
-      canPaste: clipboardHasLayers,
-      groupSelection: () => controller.groupLayers(selectedIds),
-      ungroupFolder: (folderTrackId) => controller.ungroupFolder(folderTrackId),
-      ungroupSelection: () => controller.ungroupSelection(),
-      copy: () => controller.copyLayers(selectedIds),
-      paste: () => controller.pasteLayers(),
-      duplicate: () => controller.duplicateLayers(selectedIds),
-      remove: () => controller.removeLayers(selectedIds),
-    }),
-    [selectedIds, clipboardHasLayers, controller],
-  )
+  const layerMenu = useLayerMenu(controller)
 
   const previewBoxRef = useRef<HTMLDivElement>(null)
   const coordParams = useCoordParams(previewBoxRef, width, height)

@@ -39,13 +39,9 @@ import type { AnimatableProperty, ItemKeyframes, Keyframe, KeyframeRef } from '@
 import { PROPERTY_LABELS } from '@/types/keyframe'
 import { getLayerColor } from '../utils/layer-color'
 import { getLayerPropertyBaseValue } from '../utils/keyframe-values'
-import {
-  buildLayerTree,
-  groupTracksIntoFolder,
-  ungroupFolder as ungroupFolderTracks,
-  type LayerTreeNode,
-} from '../utils/folder-tree'
+import { buildLayerTree, type LayerTreeNode } from '../utils/folder-tree'
 import { useLayerBarDrag } from '../hooks/use-layer-bar-drag'
+import { LayerRowContextMenu, type LayerTreeMenuActions } from './layer-row-context-menu'
 import {
   useItemsStore,
   useKeyframesStore,
@@ -56,7 +52,6 @@ import {
   addKeyframes,
   removeKeyframes,
   updateKeyframes,
-  setTracks,
   captureSnapshot,
   type SubComposition,
   type TimelineSnapshot,
@@ -652,7 +647,13 @@ function FolderRow({ name, depth, from, duration, collapsed, onToggle, frameToX 
   )
 }
 
-export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
+export function LottieLayersTimeline({
+  comp,
+  menu,
+}: {
+  comp: SubComposition
+  menu: LayerTreeMenuActions
+}) {
   const items = useItemsStore((s) => s.items)
   const tracks = useItemsStore((s) => s.tracks)
   const currentFrame = usePlaybackStore((s) => s.currentFrame)
@@ -697,40 +698,6 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
     }
     selection.selectItems([itemId])
   }, [])
-
-  const trackIdOfItem = useCallback((itemId: string) => {
-    return useItemsStore.getState().items.find((it) => it.id === itemId)?.trackId
-  }, [])
-
-  const handleGroupSelection = useCallback(() => {
-    const state = useItemsStore.getState()
-    const ids = useSelectionStore.getState().selectedItemIds
-    const memberTrackIds = ids
-      .map((id) => state.items.find((it) => it.id === id)?.trackId)
-      .filter((trackId): trackId is string => trackId !== undefined)
-    if (memberTrackIds.length < 2) return
-    setTracks(groupTracksIntoFolder(state.tracks, memberTrackIds, crypto.randomUUID(), 'Group'))
-  }, [])
-
-  // Ungroup the folder that the current selection lives in.
-  const handleUngroupSelection = useCallback(() => {
-    const state = useItemsStore.getState()
-    const firstId = useSelectionStore.getState().selectedItemIds[0]
-    const trackId = firstId ? trackIdOfItem(firstId) : undefined
-    const folderId = state.tracks.find((t) => t.id === trackId)?.parentTrackId
-    if (folderId) setTracks(ungroupFolderTracks(state.tracks, folderId))
-  }, [trackIdOfItem])
-
-  // Toolbar affordances: group needs ≥2 selected; ungroup needs the selection to
-  // sit inside a folder.
-  const selectionParentFolderId = useMemo(() => {
-    const firstId = selectedItemIds[0]
-    if (!firstId) return undefined
-    const trackId = items.find((it) => it.id === firstId)?.trackId
-    return tracks.find((t) => t.id === trackId)?.parentTrackId
-  }, [selectedItemIds, items, tracks])
-  const canGroup = selectedItemIds.length >= 2
-  const canUngroup = selectionParentFolderId !== undefined
 
   const [collapsedByItemId, setCollapsedByItemId] = useState<Map<string, boolean>>(new Map())
   const toggleCollapse = useCallback((itemId: string) => {
@@ -1318,41 +1285,6 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex items-center gap-1 border-b border-border bg-muted/25 px-2 py-1 text-[11px]">
-        <button
-          type="button"
-          onClick={handleGroupSelection}
-          disabled={!canGroup}
-          className={cn(
-            'flex items-center gap-1 rounded px-1.5 py-0.5',
-            canGroup
-              ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              : 'cursor-not-allowed text-muted-foreground/40',
-          )}
-          title="Group selected layers into a folder"
-        >
-          <FolderOpen className="h-3 w-3" /> Group
-        </button>
-        <button
-          type="button"
-          onClick={handleUngroupSelection}
-          disabled={!canUngroup}
-          className={cn(
-            'rounded px-1.5 py-0.5',
-            canUngroup
-              ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              : 'cursor-not-allowed text-muted-foreground/40',
-          )}
-          title="Ungroup the selection's folder"
-        >
-          Ungroup
-        </button>
-        <span className="ml-auto text-muted-foreground/60">
-          {selectedItemIds.length > 0
-            ? `${selectedItemIds.length} selected`
-            : 'Click a layer to select · Ctrl/Shift-click for many'}
-        </span>
-      </div>
       <DopesheetRulerHeader
         propertyGridStyle={propertyGridStyle}
         timelineRef={timelineRef}
@@ -1385,46 +1317,64 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
           <div className="relative min-h-full" onPointerDown={handleTimelineBackgroundPointerDown}>
             {visualRows.map((row, index) =>
               row.kind === 'folder' ? (
-                <FolderRow
+                <LayerRowContextMenu
                   key={`folder:${row.trackId}`}
-                  name={row.name}
-                  depth={row.depth}
-                  from={row.from}
-                  duration={row.duration}
-                  collapsed={collapsedFolders.has(row.trackId)}
-                  onToggle={() => toggleFolder(row.trackId)}
-                  frameToX={frameToX}
-                />
+                  menu={menu}
+                  isFolder
+                  folderTrackId={row.trackId}
+                  canUngroup
+                >
+                  <div>
+                    <FolderRow
+                      name={row.name}
+                      depth={row.depth}
+                      from={row.from}
+                      duration={row.duration}
+                      collapsed={collapsedFolders.has(row.trackId)}
+                      onToggle={() => toggleFolder(row.trackId)}
+                      frameToX={frameToX}
+                    />
+                  </div>
+                </LayerRowContextMenu>
               ) : (
-                <LayerRow
+                <LayerRowContextMenu
                   key={row.item.id}
-                  item={row.item}
-                  index={index}
-                  depth={row.depth}
-                  compDuration={comp.durationInFrames}
-                  viewport={viewport}
-                  timelineWidth={timelineWidth}
-                  frameToX={frameToX}
-                  ticks={tickFrames}
-                  getRenderedKeyframeX={getRenderedKeyframeX}
-                  itemKeyframes={keyframesByItemId[row.item.id]}
-                  isSelected={selectedItemIdSet.has(row.item.id)}
-                  onSelectLayer={handleSelectLayer}
-                  isCollapsed={collapsedByItemId.get(row.item.id) ?? false}
-                  onToggleCollapse={toggleCollapse}
-                  collapsedGroups={collapsedGroups}
-                  onToggleGroupCollapse={toggleGroupCollapse}
-                  onToggleGroupKeyframes={toggleGroupKeyframes}
-                  onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
-                  playheadFrame={currentFrame}
-                  onToggleKeyframe={toggleKeyframeAtPlayhead}
-                  selectedKeyframes={selectedKeyframes}
-                  onKeyframePointerDown={handleKeyframePointerDown}
-                  previewByItemId={previewByItemId}
-                  onSegmentEasingChange={handleSegmentEasingChange}
-                  onSegmentDragStart={handleSegmentDragStart}
-                  onSegmentDragEnd={handleSegmentDragEnd}
-                />
+                  menu={menu}
+                  isFolder={false}
+                  folderTrackId=""
+                  canUngroup={row.depth > 0}
+                >
+                  <div>
+                    <LayerRow
+                      item={row.item}
+                      index={index}
+                      depth={row.depth}
+                      compDuration={comp.durationInFrames}
+                      viewport={viewport}
+                      timelineWidth={timelineWidth}
+                      frameToX={frameToX}
+                      ticks={tickFrames}
+                      getRenderedKeyframeX={getRenderedKeyframeX}
+                      itemKeyframes={keyframesByItemId[row.item.id]}
+                      isSelected={selectedItemIdSet.has(row.item.id)}
+                      onSelectLayer={handleSelectLayer}
+                      isCollapsed={collapsedByItemId.get(row.item.id) ?? false}
+                      onToggleCollapse={toggleCollapse}
+                      collapsedGroups={collapsedGroups}
+                      onToggleGroupCollapse={toggleGroupCollapse}
+                      onToggleGroupKeyframes={toggleGroupKeyframes}
+                      onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
+                      playheadFrame={currentFrame}
+                      onToggleKeyframe={toggleKeyframeAtPlayhead}
+                      selectedKeyframes={selectedKeyframes}
+                      onKeyframePointerDown={handleKeyframePointerDown}
+                      previewByItemId={previewByItemId}
+                      onSegmentEasingChange={handleSegmentEasingChange}
+                      onSegmentDragStart={handleSegmentDragStart}
+                      onSegmentDragEnd={handleSegmentDragEnd}
+                    />
+                  </div>
+                </LayerRowContextMenu>
               ),
             )}
 
