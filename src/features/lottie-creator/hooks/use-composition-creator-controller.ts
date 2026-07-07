@@ -32,6 +32,7 @@ import {
   useKeyframesStore,
   useTimelineCommandStore,
   addItemOnNewTrack,
+  setTracks,
   updateItem,
   removeItems,
   addKeyframes,
@@ -40,6 +41,11 @@ import {
   DEFAULT_TRACK_HEIGHT,
 } from '../deps/timeline'
 import type { SubComposition } from '../deps/timeline'
+import {
+  buildLayerTree,
+  groupTracksIntoFolder,
+  ungroupFolder as ungroupFolderTracks,
+} from '../utils/folder-tree'
 
 /** Only shape/text items are valid Lottie-creator layers. */
 function isCreatorItem(item: TimelineItem): item is CreatorItem {
@@ -87,6 +93,12 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
       }))
   }, [items, tracks, keyframesByItemId])
 
+  // Nested layer/folder tree (folders = `isGroup` tracks, nesting via
+  // `parentTrackId`) for the outliner + timeline. All layers stay in this comp's
+  // live stores, so grouping is purely a track-tree reshape (one `setTracks`
+  // undo step) and every edit action keeps working unchanged.
+  const layerTree = useMemo(() => buildLayerTree(items, tracks), [items, tracks])
+
   return useMemo<CreatorController>(() => {
     const updateMeta = (updates: Partial<Omit<SubComposition, 'id'>>) =>
       useCompositionsStore.getState().updateComposition(comp.id, updates)
@@ -102,6 +114,7 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
       fps: comp.fps,
       durationInFrames: comp.durationInFrames,
       layers,
+      layerTree,
       selectedId,
       playhead: currentFrame,
       isPlaying,
@@ -205,6 +218,18 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
         }
       },
 
+      groupLayers: (layerIds) => {
+        const state = useItemsStore.getState()
+        const memberTrackIds = layerIds
+          .map((id) => state.items.find((it) => it.id === id)?.trackId)
+          .filter((trackId): trackId is string => trackId !== undefined)
+        if (memberTrackIds.length === 0) return
+        setTracks(groupTracksIntoFolder(state.tracks, memberTrackIds, crypto.randomUUID(), 'Group'))
+      },
+
+      ungroupFolder: (folderTrackId) =>
+        setTracks(ungroupFolderTracks(useItemsStore.getState().tracks, folderTrackId)),
+
       selectLayer: (id) =>
         id
           ? useSelectionStore.getState().selectItems([id])
@@ -280,6 +305,7 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
     comp.durationInFrames,
     comp.name,
     layers,
+    layerTree,
     selectedId,
     currentFrame,
     isPlaying,

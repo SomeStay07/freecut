@@ -31,6 +31,7 @@ import type { ShapeItem, ShapeType, TextItem } from '@/types/timeline'
 import type { ItemKeyframes } from '@/types/keyframe'
 import type { TransformProperties } from '@/types/transform'
 import type { CreatorLayer } from '@/types/lottie-creation'
+import type { LayerTreeNode } from '../utils/folder-tree'
 import { buildLottieDocument } from '@/infrastructure/lottie/export'
 import { Button } from '@/components/ui/button'
 import type { PresetKind } from '../utils/presets'
@@ -57,6 +58,8 @@ export interface CreatorController {
   durationInFrames: number
   /** Top-first: index 0 renders as the topmost Lottie layer. */
   layers: CreatorLayer[]
+  /** Nested layer/folder tree (top-first) for the outliner + timeline. */
+  layerTree: LayerTreeNode[]
   selectedId: string | null
   playhead: number
   isPlaying: boolean
@@ -65,6 +68,10 @@ export interface CreatorController {
   addText: () => void
   loadTemplate: (doc: TemplateDocument) => void
   removeLayer: (id: string) => void
+  /** Wrap the given layers (by item id) into a new folder. */
+  groupLayers: (layerIds: string[]) => void
+  /** Dissolve a folder track, raising its children one level. */
+  ungroupFolder: (folderTrackId: string) => void
   selectLayer: (id: string | null) => void
   updateTransform: (id: string, patch: Partial<TransformProperties>) => void
   updateShape: (id: string, patch: Partial<ShapeItem>) => void

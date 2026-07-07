@@ -10,11 +10,11 @@ export type { SubComposition } from '@/features/timeline/stores/compositions-sto
 export { useTimelineStore } from '@/features/timeline/stores/timeline-store'
 export {
   addItemOnNewTrack,
+  setTracks,
   updateItem,
   removeItems,
   addKeyframe,
   addKeyframes,
-  removeKeyframe,
   removeKeyframes,
   removeKeyframesForItem,
   removeKeyframesForProperty,
@@ -24,7 +24,6 @@ export { useItemsStore } from '@/features/timeline/stores/items-store'
 export { useKeyframesStore } from '@/features/timeline/stores/keyframes-store'
 export { useKeyframeSelectionStore } from '@/features/timeline/stores/keyframe-selection-store'
 export { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants'
-export { KeyframeGraphPanel } from '@/features/timeline/components/keyframe-graph-panel'
 export { useTimelineCommandStore } from '@/features/timeline/stores/timeline-command-store'
 export { captureSnapshot } from '@/features/timeline/stores/commands/snapshot'
 export type { TimelineSnapshot } from '@/features/timeline/stores/commands/types'
