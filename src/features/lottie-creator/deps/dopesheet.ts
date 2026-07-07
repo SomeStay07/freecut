@@ -8,7 +8,13 @@ export { useDopesheetViewport } from '@/features/keyframes/components/dopesheet-
 export {
   getFrameAxisX,
   getFrameFromAxisX,
+  getVisibleKeyframeX,
 } from '@/features/keyframes/components/dopesheet-editor/layout'
 export { DopesheetRulerHeader } from '@/features/keyframes/components/dopesheet-editor/dopesheet-ruler-header'
 export { DopesheetPlayheadLine } from '@/features/keyframes/components/dopesheet-editor/dopesheet-playhead-line'
-export type { Viewport } from '@/features/keyframes/components/dopesheet-editor/dopesheet-types'
+export { PropertyTimelineCell } from '@/features/keyframes/components/dopesheet-editor/dopesheet-timeline-cells'
+export type {
+  Viewport,
+  KeyframeMeta,
+} from '@/features/keyframes/components/dopesheet-editor/dopesheet-types'
+export type { BlockedFrameRange } from '@/features/keyframes/utils/transition-region'

@@ -1,9 +1,11 @@
 /**
- * Fused multi-layer keyframe timeline skeleton (Increment 1) for the in-editor
- * Lottie creator — an After-Effects-style layer stack sharing one frame
- * viewport/ruler/playhead across every layer. This increment only renders the
- * outliner + per-layer colored timing bars (move/trim); keyframe sub-rows land
- * in a later increment.
+ * Fused multi-layer keyframe timeline (Increment 2) for the in-editor Lottie
+ * creator — an After-Effects-style layer stack sharing one frame
+ * viewport/ruler/playhead across every layer. Renders the outliner +
+ * per-layer colored timing bars (move/trim) plus, when a layer is expanded,
+ * one read-only keyframe sub-row per animated property (via the shared
+ * `PropertyTimelineCell`). Keyframe drag/select/easing interaction lands in a
+ * later increment.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -11,22 +13,36 @@ import { cn } from '@/shared/ui/cn'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
 import type { ShapeItem, TextItem, TimelineItem } from '@/types/timeline'
+import type { AnimatableProperty, ItemKeyframes, Keyframe } from '@/types/keyframe'
+import { PROPERTY_LABELS } from '@/types/keyframe'
 import { getLayerColor } from '../utils/layer-color'
 import { useLayerBarDrag } from '../hooks/use-layer-bar-drag'
-import { useItemsStore, type SubComposition } from '../deps/timeline'
+import { useItemsStore, useKeyframesStore, type SubComposition } from '../deps/timeline'
 import {
   DopesheetPlayheadLine,
   DopesheetRulerHeader,
+  PropertyTimelineCell,
   getFrameAxisX,
   getFrameFromAxisX,
+  getVisibleKeyframeX,
   useDopesheetViewport,
+  type BlockedFrameRange,
+  type KeyframeMeta,
   type Viewport,
 } from '../deps/dopesheet'
 
 const OUTLINER_WIDTH = 208
 const ROW_HEIGHT = 40
+const KEYFRAME_ROW_HEIGHT = 28
 const BAR_HEIGHT = 26
 const TICK_COUNT = 9
+
+// Read-only sub-rows never have selection/blocked ranges/preview state — reuse
+// stable empty constants so PropertyTimelineCell (React.memo) doesn't see a
+// new reference on every render.
+const EMPTY_SELECTED_KEYFRAME_IDS = new Set<string>()
+const EMPTY_BLOCKED_RANGES: BlockedFrameRange[] = []
+const noop = () => {}
 
 type LayerItem = ShapeItem | TextItem
 
@@ -38,6 +54,71 @@ function clampFrame(frame: number, totalFrames: number): number {
   return Math.max(0, Math.min(totalFrames - 1, Math.round(frame)))
 }
 
+interface KeyframeRowProps {
+  itemId: string
+  property: AnimatableProperty
+  keyframes: Keyframe[]
+  ticks: number[]
+  frameToX: (frame: number) => number
+  getRenderedKeyframeX: (frame: number) => number | null
+  accentColor: string
+}
+
+function KeyframeRow({
+  itemId,
+  property,
+  keyframes,
+  ticks,
+  frameToX,
+  getRenderedKeyframeX,
+  accentColor,
+}: KeyframeRowProps) {
+  const keyframeMetaByIdRef = useRef(new Map<string, KeyframeMeta>())
+  const renderedKeyframeXById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const keyframe of keyframes) {
+      const x = getRenderedKeyframeX(keyframe.frame)
+      if (x !== null) map.set(keyframe.id, x)
+    }
+    return map
+  }, [keyframes, getRenderedKeyframeX])
+
+  return (
+    <div
+      className="grid border-b border-border/40"
+      style={{ gridTemplateColumns: `${OUTLINER_WIDTH}px 1fr`, height: KEYFRAME_ROW_HEIGHT }}
+    >
+      <div className="flex items-center truncate pl-7 text-[11px] text-muted-foreground">
+        {PROPERTY_LABELS[property]}
+      </div>
+      {/* PropertyTimelineCell's root is a height-less `relative` div that positions
+          its diamonds at top:50% — render it as the DIRECT grid cell so grid
+          `align-items: stretch` gives it the row height (an extra wrapper would
+          leave it 0-tall and clip the diamonds). */}
+      <PropertyTimelineCell
+        itemId={itemId}
+        property={property}
+        keyframes={keyframes}
+        locked={false}
+        ticks={ticks}
+        frameToX={frameToX}
+        getRenderedKeyframeX={getRenderedKeyframeX}
+        renderedKeyframeXById={renderedKeyframeXById}
+        transitionBlockedRanges={EMPTY_BLOCKED_RANGES}
+        selectedKeyframeIds={EMPTY_SELECTED_KEYFRAME_IDS}
+        disabled
+        onRowPointerDown={noop}
+        onKeyframePointerDown={noop}
+        setKeyframeButtonRef={noop}
+        keyframeMetaByIdRef={keyframeMetaByIdRef}
+        sheetPreviewFrames={null}
+        sheetPreviewDuplicateKeyframeIds={null}
+        accentColor={accentColor}
+      />
+    </div>
+  )
+}
+
 interface LayerRowProps {
   item: LayerItem
   index: number
@@ -45,6 +126,9 @@ interface LayerRowProps {
   viewport: Viewport
   timelineWidth: number
   frameToX: (frame: number) => number
+  ticks: number[]
+  getRenderedKeyframeX: (frame: number) => number | null
+  itemKeyframes: ItemKeyframes | undefined
   isSelected: boolean
   isCollapsed: boolean
   onToggleCollapse: (itemId: string) => void
@@ -57,6 +141,9 @@ function LayerRow({
   viewport,
   timelineWidth,
   frameToX,
+  ticks,
+  getRenderedKeyframeX,
+  itemKeyframes,
   isSelected,
   isCollapsed,
   onToggleCollapse,
@@ -81,58 +168,79 @@ function LayerRow({
   const left = frameToX(previewFrom)
   const width = Math.max(2, frameToX(previewFrom + previewDurationInFrames) - left)
 
-  return (
-    <div
-      className="grid border-b border-border/60"
-      style={{ gridTemplateColumns: `${OUTLINER_WIDTH}px 1fr`, height: ROW_HEIGHT }}
-    >
-      <div
-        className={cn('flex items-center gap-1.5 px-1.5 text-xs', isSelected && 'bg-primary/10')}
-      >
-        <button
-          type="button"
-          onClick={() => onToggleCollapse(item.id)}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-          aria-label={isCollapsed ? 'Expand layer' : 'Collapse layer'}
-        >
-          {isCollapsed ? (
-            <ChevronRight className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronDown className="h-3.5 w-3.5" />
-          )}
-        </button>
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-sm border border-border"
-          style={{ backgroundColor: color }}
-        />
-        <span className="truncate">{item.label}</span>
-      </div>
+  const animatedProperties = useMemo(
+    () => (itemKeyframes?.properties ?? []).filter((p) => p.keyframes.length > 0),
+    [itemKeyframes],
+  )
 
-      <div className="relative border-l border-border/60">
+  return (
+    <div>
+      <div
+        className="grid border-b border-border/60"
+        style={{ gridTemplateColumns: `${OUTLINER_WIDTH}px 1fr`, height: ROW_HEIGHT }}
+      >
         <div
-          onPointerDown={onBodyPointerDown}
-          className={cn(
-            'absolute top-1/2 -translate-y-1/2 rounded-sm border cursor-grab active:cursor-grabbing',
-            mode === 'move' && 'cursor-grabbing',
-          )}
-          style={{
-            left,
-            width,
-            height: BAR_HEIGHT,
-            backgroundColor: `${color}55`,
-            borderColor: color,
-          }}
+          className={cn('flex items-center gap-1.5 px-1.5 text-xs', isSelected && 'bg-primary/10')}
         >
-          <div
-            onPointerDown={onTrimLeftPointerDown}
-            className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize"
+          <button
+            type="button"
+            onClick={() => onToggleCollapse(item.id)}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+            aria-label={isCollapsed ? 'Expand layer' : 'Collapse layer'}
+          >
+            {isCollapsed ? (
+              <ChevronRight className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-sm border border-border"
+            style={{ backgroundColor: color }}
           />
+          <span className="truncate">{item.label}</span>
+        </div>
+
+        <div className="relative border-l border-border/60">
           <div
-            onPointerDown={onTrimRightPointerDown}
-            className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize"
-          />
+            onPointerDown={onBodyPointerDown}
+            className={cn(
+              'absolute top-1/2 -translate-y-1/2 rounded-sm border cursor-grab active:cursor-grabbing',
+              mode === 'move' && 'cursor-grabbing',
+            )}
+            style={{
+              left,
+              width,
+              height: BAR_HEIGHT,
+              backgroundColor: `${color}55`,
+              borderColor: color,
+            }}
+          >
+            <div
+              onPointerDown={onTrimLeftPointerDown}
+              className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize"
+            />
+            <div
+              onPointerDown={onTrimRightPointerDown}
+              className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize"
+            />
+          </div>
         </div>
       </div>
+
+      {!isCollapsed &&
+        animatedProperties.map((p) => (
+          <KeyframeRow
+            key={p.property}
+            itemId={item.id}
+            property={p.property}
+            keyframes={p.keyframes}
+            ticks={ticks}
+            frameToX={frameToX}
+            getRenderedKeyframeX={getRenderedKeyframeX}
+            accentColor={color}
+          />
+        ))}
     </div>
   )
 }
@@ -142,6 +250,7 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
   const tracks = useItemsStore((s) => s.tracks)
   const currentFrame = usePlaybackStore((s) => s.currentFrame)
   const selectedItemId = useSelectionStore((s) => s.selectedItemIds[0] ?? null)
+  const keyframesByItemId = useKeyframesStore((s) => s.keyframesByItemId)
 
   const layers = useMemo(() => {
     const orderByTrackId = new Map(tracks.map((t) => [t.id, t.order]))
@@ -182,6 +291,11 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
 
   const frameToX = useCallback(
     (frame: number) => getFrameAxisX(frame, viewport, timelineWidth),
+    [viewport, timelineWidth],
+  )
+
+  const getRenderedKeyframeX = useCallback(
+    (frame: number) => getVisibleKeyframeX(frame, viewport, timelineWidth),
     [viewport, timelineWidth],
   )
 
@@ -229,22 +343,28 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
     [],
   )
 
-  const rulerTickElements = useMemo(() => {
+  const tickFrames = useMemo(() => {
     const range = Math.max(1, viewport.endFrame - viewport.startFrame)
     const frames = new Set<number>()
     for (let i = 0; i <= TICK_COUNT; i++) {
       frames.add(Math.round(viewport.startFrame + (range * i) / TICK_COUNT))
     }
-    return [...frames].map((frame) => (
-      <div
-        key={frame}
-        className="absolute inset-y-0 border-l border-border/60"
-        style={{ left: Math.round(frameToX(frame)) }}
-      >
-        <span className="absolute top-0.5 left-1 text-[10px] text-muted-foreground">{frame}</span>
-      </div>
-    ))
-  }, [viewport, frameToX])
+    return [...frames]
+  }, [viewport])
+
+  const rulerTickElements = useMemo(
+    () =>
+      tickFrames.map((frame) => (
+        <div
+          key={frame}
+          className="absolute inset-y-0 border-l border-border/60"
+          style={{ left: Math.round(frameToX(frame)) }}
+        >
+          <span className="absolute top-0.5 left-1 text-[10px] text-muted-foreground">{frame}</span>
+        </div>
+      )),
+    [tickFrames, frameToX],
+  )
 
   const timelineContentLeft = OUTLINER_WIDTH + 1
   const maxLeft = Math.max(0, timelineWidth - 1)
@@ -286,6 +406,9 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
               viewport={viewport}
               timelineWidth={timelineWidth}
               frameToX={frameToX}
+              ticks={tickFrames}
+              getRenderedKeyframeX={getRenderedKeyframeX}
+              itemKeyframes={keyframesByItemId[item.id]}
               isSelected={item.id === selectedItemId}
               isCollapsed={collapsedByItemId.get(item.id) ?? false}
               onToggleCollapse={toggleCollapse}

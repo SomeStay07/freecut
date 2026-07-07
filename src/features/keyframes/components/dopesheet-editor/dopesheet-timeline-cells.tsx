@@ -80,17 +80,32 @@ function buildConnectorSegments(
   })
 }
 
-function KeyframeConnectors({ segments }: { segments: ConnectorSegment[] }) {
+function KeyframeConnectors({
+  segments,
+  accentColor,
+}: {
+  segments: ConnectorSegment[]
+  /** Overrides the connector line color (e.g. per-layer color). Defaults to the standard neutral line. */
+  accentColor?: string
+}) {
   return segments.map((segment) => (
     <div
       key={segment.key}
       className={cn(
         'pointer-events-none absolute z-0 -translate-y-1/2',
-        segment.held
-          ? 'border-t border-dashed border-neutral-500/50'
-          : 'h-px bg-neutral-400/50',
+        segment.held ? 'border-t border-dashed' : 'h-px',
+        !accentColor && (segment.held ? 'border-neutral-500/50' : 'bg-neutral-400/50'),
       )}
-      style={{ left: segment.left, width: segment.width, top: '50%' }}
+      style={{
+        left: segment.left,
+        width: segment.width,
+        top: '50%',
+        ...(accentColor
+          ? segment.held
+            ? { borderColor: `${accentColor}80` }
+            : { backgroundColor: `${accentColor}80` }
+          : undefined),
+      }}
     />
   ))
 }
@@ -223,14 +238,10 @@ export const GroupTimelineCell = memo(function GroupTimelineCell({
 
       {onSegmentEasingChange &&
         segmentSpans.map((span) => {
-          const editable = span.from.keyframes.filter(
-            ({ property }) => !isPropertyLocked(property),
-          )
+          const editable = span.from.keyframes.filter(({ property }) => !isPropertyLocked(property))
           if (editable.length === 0) return null
           const first = editable[0]!
-          const mixed = editable.some(
-            ({ keyframe }) => keyframe.easing !== first.keyframe.easing,
-          )
+          const mixed = editable.some(({ keyframe }) => keyframe.easing !== first.keyframe.easing)
           const refs: KeyframeRef[] = editable.map(({ property, keyframe }) => ({
             itemId,
             property,
@@ -355,6 +366,8 @@ interface PropertyTimelineCellProps {
   keyframeMetaByIdRef: MutableRefObject<Map<string, KeyframeMeta>>
   sheetPreviewFrames: Record<string, number> | null
   sheetPreviewDuplicateKeyframeIds: string[] | null
+  /** Overrides the unselected keyframe diamond fill/border color (e.g. per-layer color in the Lottie layers timeline). Defaults to the standard neutral diamond styling. */
+  accentColor?: string
 }
 
 export const PropertyTimelineCell = memo(function PropertyTimelineCell({
@@ -379,6 +392,7 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
   keyframeMetaByIdRef,
   sheetPreviewFrames,
   sheetPreviewDuplicateKeyframeIds,
+  accentColor,
 }: PropertyTimelineCellProps) {
   const { t } = useTranslation()
 
@@ -399,7 +413,9 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
     keyframes.flatMap((keyframe) => {
       const x = xForKeyframe(keyframe)
       if (x === null) return []
-      return [{ id: keyframe.id, frame: displayedFrame(keyframe), x, held: keyframe.easing === 'hold' }]
+      return [
+        { id: keyframe.id, frame: displayedFrame(keyframe), x, held: keyframe.easing === 'hold' },
+      ]
     }),
   )
 
@@ -448,7 +464,7 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
         />
       )}
 
-      <KeyframeConnectors segments={connectorSegments} />
+      <KeyframeConnectors segments={connectorSegments} accentColor={accentColor} />
 
       {onSegmentEasingChange &&
         segmentSpans.map((span) => (
@@ -512,8 +528,13 @@ export const PropertyTimelineCell = memo(function PropertyTimelineCell({
                 'pointer-events-none block h-2 w-2 rotate-45 border transition-colors',
                 selected
                   ? 'border-blue-100 bg-blue-500 shadow-[0_0_0_1px_rgba(59,130,246,0.45)]'
-                  : 'border-transparent bg-neutral-200 group-hover:bg-white',
+                  : !accentColor && 'border-transparent bg-neutral-200 group-hover:bg-white',
               )}
+              style={
+                !selected && accentColor
+                  ? { backgroundColor: accentColor, borderColor: accentColor }
+                  : undefined
+              }
             />
           </button>
         )
