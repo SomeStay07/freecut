@@ -38,6 +38,7 @@ import { useCoordParams } from '../hooks/use-coord-params'
 import { CREATOR_FONT, ensureCreatorFont } from '../utils/creator-font'
 import { LottieLivePreview } from './lottie-live-preview'
 import { CreatorTransformGizmo } from './creator-transform-gizmo'
+import { CreatorLayerHitAreas } from './creator-layer-hit-areas'
 import { TemplateGallery, type TemplateDocument } from './template-gallery'
 
 /** The built Lottie document handed to the header slots. */
@@ -437,6 +438,14 @@ export function LottieCreatorSurface({
                   <span className="text-sm text-muted-foreground">
                     Add a shape or text to begin.
                   </span>
+                )}
+                {coordParams && !isPlaying && layers.length > 0 && (
+                  <CreatorLayerHitAreas
+                    items={layers.map((layer) => layer.item)}
+                    selectedId={selectedId}
+                    coordParams={coordParams}
+                    onSelect={controller.selectLayer}
+                  />
                 )}
                 {coordParams && selectedItem && (
                   <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>

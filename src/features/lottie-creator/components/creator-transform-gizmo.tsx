@@ -25,24 +25,7 @@ import {
   type GizmoHandle,
   type Transform,
 } from '../deps/gizmo'
-
-function resolveBasePose(item: ShapeItem | TextItem): Transform {
-  const t = item.transform ?? {}
-  const width = t.width ?? 100
-  const height = t.height ?? 100
-  return {
-    x: t.x ?? 0,
-    y: t.y ?? 0,
-    width,
-    height,
-    anchorX: t.anchorX ?? width / 2,
-    anchorY: t.anchorY ?? height / 2,
-    rotation: t.rotation ?? 0,
-    opacity: t.opacity ?? 1,
-    cornerRadius: t.cornerRadius ?? 0,
-    aspectRatioLocked: t.aspectRatioLocked,
-  }
-}
+import { resolveBasePose } from '../utils/creator-pose'
 
 interface CreatorTransformGizmoProps {
   item: ShapeItem | TextItem
