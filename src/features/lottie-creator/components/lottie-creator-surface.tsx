@@ -31,6 +31,7 @@ import type { ItemKeyframes } from '@/types/keyframe'
 import type { TransformProperties } from '@/types/transform'
 import type { CreatorLayer } from '@/types/lottie-creation'
 import type { LayerTreeNode } from '../utils/folder-tree'
+import type { DropTarget } from '../utils/reorder-tree'
 import { buildLottieDocument } from '@/infrastructure/lottie/export'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/shared/ui/cn'
@@ -75,6 +76,8 @@ export interface CreatorController {
   groupLayers: (layerIds: string[]) => void
   /** Dissolve a folder track, raising its children one level. */
   ungroupFolder: (folderTrackId: string) => void
+  /** Reorder/reparent a layer or folder track via drag-and-drop. */
+  moveTrack: (sourceTrackId: string, target: DropTarget) => void
   selectLayer: (id: string | null, additive?: boolean) => void
   updateTransform: (id: string, patch: Partial<TransformProperties>) => void
   updateShape: (id: string, patch: Partial<ShapeItem>) => void
@@ -433,6 +436,9 @@ export function LottieCreatorSurface({
                   onSelectLayer={(id, additive) => controller.selectLayer(id, additive)}
                   onRemoveLayer={(id) => controller.removeLayer(id)}
                   onUngroupFolder={(folderTrackId) => controller.ungroupFolder(folderTrackId)}
+                  onMoveTrack={(sourceTrackId, target) =>
+                    controller.moveTrack(sourceTrackId, target)
+                  }
                 />
               )}
             </div>

@@ -46,6 +46,7 @@ import {
   groupTracksIntoFolder,
   ungroupFolder as ungroupFolderTracks,
 } from '../utils/folder-tree'
+import { moveTrackInTree } from '../utils/reorder-tree'
 
 /** Only shape/text items are valid Lottie-creator layers. */
 function isCreatorItem(item: TimelineItem): item is CreatorItem {
@@ -231,6 +232,9 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
 
       ungroupFolder: (folderTrackId) =>
         setTracks(ungroupFolderTracks(useItemsStore.getState().tracks, folderTrackId)),
+
+      moveTrack: (sourceTrackId, target) =>
+        setTracks(moveTrackInTree(useItemsStore.getState().tracks, sourceTrackId, target)),
 
       selectLayer: (id, additive) => {
         const selection = useSelectionStore.getState()
