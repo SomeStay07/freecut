@@ -13,18 +13,17 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Circle,
   FileJson,
+  FolderPlus,
   Heart,
   Hexagon,
   LayoutTemplate,
   Pause,
   Play,
-  Plus,
   Redo2,
   Square,
   Star,
   Triangle,
   Type,
-  Trash2,
   Undo2,
 } from 'lucide-react'
 import type { ShapeItem, ShapeType, TextItem } from '@/types/timeline'
@@ -40,6 +39,7 @@ import { CREATOR_FONT, ensureCreatorFont } from '../utils/creator-font'
 import { LottieLivePreview } from './lottie-live-preview'
 import { CreatorTransformGizmo } from './creator-transform-gizmo'
 import { CreatorLayerHitAreas } from './creator-layer-hit-areas'
+import { CreatorLayerTree } from './creator-layer-tree'
 import { TemplateGallery, type TemplateDocument } from './template-gallery'
 
 /** The built Lottie document handed to the header slots. */
@@ -61,6 +61,8 @@ export interface CreatorController {
   /** Nested layer/folder tree (top-first) for the outliner + timeline. */
   layerTree: LayerTreeNode[]
   selectedId: string | null
+  /** All selected layer ids (multi-select via additive `selectLayer`). */
+  selectedIds: string[]
   playhead: number
   isPlaying: boolean
   name: string
@@ -72,7 +74,7 @@ export interface CreatorController {
   groupLayers: (layerIds: string[]) => void
   /** Dissolve a folder track, raising its children one level. */
   ungroupFolder: (folderTrackId: string) => void
-  selectLayer: (id: string | null) => void
+  selectLayer: (id: string | null, additive?: boolean) => void
   updateTransform: (id: string, patch: Partial<TransformProperties>) => void
   updateShape: (id: string, patch: Partial<ShapeItem>) => void
   updateText: (id: string, patch: Partial<TextItem>) => void
@@ -165,8 +167,19 @@ export function LottieCreatorSurface({
   /** Bottom dock rendered below the 3-pane row (e.g. the keyframe graph panel). */
   renderDock?: () => ReactNode
 }) {
-  const { width, height, fps, durationInFrames, layers, selectedId, playhead, isPlaying, name } =
-    controller
+  const {
+    width,
+    height,
+    fps,
+    durationInFrames,
+    layers,
+    layerTree,
+    selectedId,
+    selectedIds,
+    playhead,
+    isPlaying,
+    name,
+  } = controller
 
   const { data, doc, warnings } = useMemo(() => {
     const items = layers.map((layer) => layer.item)
@@ -253,6 +266,17 @@ export function LottieCreatorSurface({
   const selectedItem = selected?.item ?? null
   const transform = selectedItem?.transform ?? {}
   const hasAnimation = (selected?.properties.length ?? 0) > 0
+
+  // Folder collapse is view-only local state (never persisted to the document).
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set())
+  const toggleFolder = (folderTrackId: string) =>
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev)
+      if (next.has(folderTrackId)) next.delete(folderTrackId)
+      else next.add(folderTrackId)
+      return next
+    })
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
 
   const previewBoxRef = useRef<HTMLDivElement>(null)
   const coordParams = useCoordParams(previewBoxRef, width, height)
@@ -379,46 +403,33 @@ export function LottieCreatorSurface({
 
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                <Plus className="h-3 w-3" /> Layers
+                <span className="flex-1">Layers</span>
+                {selectedIds.length >= 2 && (
+                  <button
+                    type="button"
+                    onClick={() => controller.groupLayers(selectedIds)}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 normal-case text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="Group selected layers into a folder"
+                  >
+                    <FolderPlus className="h-3 w-3" /> Group
+                  </button>
+                )}
               </div>
-              {layers.length === 0 && (
+              {layers.length === 0 ? (
                 <div className="px-1 py-4 text-center text-xs text-muted-foreground">
                   No layers yet — add a shape above.
                 </div>
+              ) : (
+                <CreatorLayerTree
+                  nodes={layerTree}
+                  selectedIds={selectedIdSet}
+                  collapsedFolders={collapsedFolders}
+                  onToggleFolder={toggleFolder}
+                  onSelectLayer={(id, additive) => controller.selectLayer(id, additive)}
+                  onRemoveLayer={(id) => controller.removeLayer(id)}
+                  onUngroupFolder={(folderTrackId) => controller.ungroupFolder(folderTrackId)}
+                />
               )}
-              <ul className="space-y-1">
-                {layers.map((layer) => (
-                  <li key={layer.item.id}>
-                    <button
-                      onClick={() => controller.selectLayer(layer.item.id)}
-                      className={`group flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs ${
-                        layer.item.id === selectedId
-                          ? 'bg-primary/15 text-foreground'
-                          : 'text-muted-foreground hover:bg-muted'
-                      }`}
-                    >
-                      <span
-                        className="h-3 w-3 shrink-0 rounded-sm border border-border"
-                        style={{
-                          backgroundColor:
-                            layer.item.type === 'shape' ? layer.item.fillColor : layer.item.color,
-                        }}
-                      />
-                      <span className="flex-1 truncate">{layer.item.label}</span>
-                      {layer.properties.length > 0 && (
-                        <span className="text-[9px] text-primary">anim</span>
-                      )}
-                      <Trash2
-                        className="h-3 w-3 opacity-0 hover:text-red-500 group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          controller.removeLayer(layer.item.id)
-                        }}
-                      />
-                    </button>
-                  </li>
-                ))}
-              </ul>
             </div>
           </aside>
 

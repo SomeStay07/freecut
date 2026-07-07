@@ -75,7 +75,8 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
   const items = useItemsStore((s) => s.items)
   const tracks = useItemsStore((s) => s.tracks)
   const keyframesByItemId = useKeyframesStore((s) => s.keyframesByItemId)
-  const selectedId = useSelectionStore((s) => s.selectedItemIds[0] ?? null)
+  const selectedIds = useSelectionStore((s) => s.selectedItemIds)
+  const selectedId = selectedIds[0] ?? null
   const currentFrame = usePlaybackStore((s) => s.currentFrame)
   const canUndo = useTimelineCommandStore((s) => s.canUndo)
   const canRedo = useTimelineCommandStore((s) => s.canRedo)
@@ -116,6 +117,7 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
       layers,
       layerTree,
       selectedId,
+      selectedIds,
       playhead: currentFrame,
       isPlaying,
       name: comp.name,
@@ -230,10 +232,21 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
       ungroupFolder: (folderTrackId) =>
         setTracks(ungroupFolderTracks(useItemsStore.getState().tracks, folderTrackId)),
 
-      selectLayer: (id) =>
-        id
-          ? useSelectionStore.getState().selectItems([id])
-          : useSelectionStore.getState().clearSelection(),
+      selectLayer: (id, additive) => {
+        const selection = useSelectionStore.getState()
+        if (!id) {
+          selection.clearSelection()
+          return
+        }
+        if (additive) {
+          const current = selection.selectedItemIds
+          selection.selectItems(
+            current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
+          )
+          return
+        }
+        selection.selectItems([id])
+      },
 
       updateTransform: (id, patch) => {
         const item = useItemsStore.getState().items.find((it) => it.id === id)
@@ -307,6 +320,7 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
     layers,
     layerTree,
     selectedId,
+    selectedIds,
     currentFrame,
     isPlaying,
     canUndo,
