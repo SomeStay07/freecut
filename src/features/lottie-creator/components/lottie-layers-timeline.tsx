@@ -20,11 +20,15 @@
  * animated properties into collapsible headers (Transform/Effects/…), reusing
  * the video dopesheet's `buildGroupedPropertyStructure` + `GroupTimelineCell`
  * (aggregate diamonds, group segment easing, a group playhead ◆ toggle, and
- * click-to-select of a stacked group keyframe). Group-diamond drag-retime,
- * shift-range select and alt-duplicate are deferred.
+ * click-to-select of a stacked group keyframe). Layer folders (nestable
+ * `isGroup` tracks) render as collapsible folder rows with an aggregate timing
+ * bar spanning their descendants; the tree is flattened into an ordered
+ * `visualRows` list that drives both the JSX and the marquee geometry, so
+ * folders are just extra rows. Group-diamond drag-retime, shift-range select
+ * and alt-duplicate are deferred.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
-import { ChevronDown, ChevronRight, Diamond, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Diamond, FolderOpen, Plus } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { usePlaybackStore } from '@/shared/state/playback'
@@ -35,6 +39,7 @@ import type { AnimatableProperty, ItemKeyframes, Keyframe, KeyframeRef } from '@
 import { PROPERTY_LABELS } from '@/types/keyframe'
 import { getLayerColor } from '../utils/layer-color'
 import { getLayerPropertyBaseValue } from '../utils/keyframe-values'
+import { buildLayerTree, type LayerTreeNode } from '../utils/folder-tree'
 import { useLayerBarDrag } from '../hooks/use-layer-bar-drag'
 import {
   useItemsStore,
@@ -85,6 +90,61 @@ type PropertyGroup = DopesheetPropertyGroupStructure<{
 type FrameGroup = PropertyGroup['frameGroups'][number]
 
 const groupKey = (itemId: string, groupId: string) => `${itemId}::${groupId}`
+
+const INDENT_PX = 14
+
+/**
+ * The tree flattened into an ordered render list (respecting folder collapse).
+ * Both the JSX render and the marquee-geometry walk iterate this so folders are
+ * simply extra rows — no separate recursion to keep in sync.
+ */
+type VisualRow =
+  | { kind: 'folder'; trackId: string; name: string; depth: number; from: number; duration: number }
+  | { kind: 'layer'; item: LayerItem; depth: number }
+
+/** Union frame span [from, from+duration] over every layer nested under a folder. */
+function folderSpan(node: LayerTreeNode): { from: number; duration: number } {
+  let min = Infinity
+  let max = 0
+  const visit = (n: LayerTreeNode) => {
+    if (n.type === 'layer') {
+      min = Math.min(min, n.item.from)
+      max = Math.max(max, n.item.from + n.item.durationInFrames)
+    } else {
+      for (const child of n.children) visit(child)
+    }
+  }
+  visit(node)
+  if (min === Infinity) return { from: 0, duration: 0 }
+  return { from: min, duration: max - min }
+}
+
+function flattenLayerTree(
+  nodes: LayerTreeNode[],
+  collapsedFolders: Set<string>,
+  depth = 0,
+  out: VisualRow[] = [],
+): VisualRow[] {
+  for (const node of nodes) {
+    if (node.type === 'folder') {
+      const span = folderSpan(node)
+      out.push({
+        kind: 'folder',
+        trackId: node.trackId,
+        name: node.name,
+        depth,
+        from: span.from,
+        duration: span.duration,
+      })
+      if (!collapsedFolders.has(node.trackId)) {
+        flattenLayerTree(node.children, collapsedFolders, depth + 1, out)
+      }
+    } else {
+      out.push({ kind: 'layer', item: node.item, depth })
+    }
+  }
+  return out
+}
 
 // Sub-rows never have transition-blocked ranges (no transitions in the Lottie
 // composition timeline) or duplicate-drag preview state — reuse stable empty
@@ -232,6 +292,7 @@ function KeyframeRow({
 interface LayerRowProps {
   item: LayerItem
   index: number
+  depth: number
   compDuration: number
   viewport: Viewport
   timelineWidth: number
@@ -268,6 +329,7 @@ interface LayerRowProps {
 function LayerRow({
   item,
   index,
+  depth,
   compDuration,
   viewport,
   timelineWidth,
@@ -345,7 +407,8 @@ function LayerRow({
         style={{ gridTemplateColumns: `${OUTLINER_WIDTH}px 1fr`, height: ROW_HEIGHT }}
       >
         <div
-          className={cn('flex items-center gap-1.5 px-1.5 text-xs', isSelected && 'bg-primary/10')}
+          className={cn('flex items-center gap-1.5 pr-1.5 text-xs', isSelected && 'bg-primary/10')}
+          style={{ paddingLeft: 6 + depth * INDENT_PX }}
         >
           <button
             type="button"
@@ -520,6 +583,56 @@ function LayerRow({
   )
 }
 
+interface FolderRowProps {
+  name: string
+  depth: number
+  from: number
+  duration: number
+  collapsed: boolean
+  onToggle: () => void
+  frameToX: (frame: number) => number
+}
+
+function FolderRow({ name, depth, from, duration, collapsed, onToggle, frameToX }: FolderRowProps) {
+  const left = frameToX(from)
+  const width = Math.max(2, frameToX(from + duration) - left)
+  return (
+    <div
+      className="grid border-b border-border/60 bg-muted/20"
+      style={{ gridTemplateColumns: `${OUTLINER_WIDTH}px 1fr`, height: ROW_HEIGHT }}
+    >
+      <div
+        className="flex items-center gap-1.5 pr-1.5 text-xs"
+        style={{ paddingLeft: 6 + depth * INDENT_PX }}
+      >
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+          aria-label={collapsed ? 'Expand folder' : 'Collapse folder'}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )}
+        </button>
+        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate font-medium">{name}</span>
+      </div>
+
+      <div className="relative border-l border-border/60">
+        {duration > 0 && (
+          <div
+            className="absolute top-1/2 -translate-y-1/2 rounded-sm border border-border/70 bg-muted-foreground/25"
+            style={{ left, width, height: BAR_HEIGHT }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
   const items = useItemsStore((s) => s.items)
   const tracks = useItemsStore((s) => s.tracks)
@@ -530,13 +643,26 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
   // Use `_updateKeyframe` directly (no undo per call) for live segment-easing drags.
   const _updateKeyframe = useKeyframesStore((s) => s._updateKeyframe)
 
-  const layers = useMemo(() => {
-    const orderByTrackId = new Map(tracks.map((t) => [t.id, t.order]))
-    return items
-      .filter(isLayerItem)
-      .slice()
-      .sort((a, b) => (orderByTrackId.get(a.trackId) ?? 0) - (orderByTrackId.get(b.trackId) ?? 0))
-  }, [items, tracks])
+  // Folder collapse is view-only local state (never persisted to the document).
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set())
+  const toggleFolder = useCallback((folderTrackId: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev)
+      if (next.has(folderTrackId)) next.delete(folderTrackId)
+      else next.add(folderTrackId)
+      return next
+    })
+  }, [])
+
+  // Nested layer/folder tree flattened into an ordered render list (folders +
+  // layers with depth), driving both the JSX and the marquee geometry so folders
+  // are just extra rows.
+  const tree = useMemo(() => buildLayerTree(items, tracks), [items, tracks])
+  const visualRows = useMemo(
+    () => flattenLayerTree(tree, collapsedFolders),
+    [tree, collapsedFolders],
+  )
+  const hasLayers = useMemo(() => items.some(isLayerItem), [items])
 
   const [collapsedByItemId, setCollapsedByItemId] = useState<Map<string, boolean>>(new Map())
   const toggleCollapse = useCallback((itemId: string) => {
@@ -724,7 +850,14 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
     const points: { keyframeId: string; x: number; y: number }[] = []
     const refById = new Map<string, KeyframeRef>()
     let top = 0
-    for (const layer of layers) {
+    for (const row of visualRows) {
+      // Folder header rows carry no keyframes — just advance the cursor so layer
+      // rows underneath land at the right content-y for hit-testing.
+      if (row.kind === 'folder') {
+        top += ROW_HEIGHT
+        continue
+      }
+      const layer = row.item
       top += ROW_HEIGHT
       if (collapsedByItemId.get(layer.id) ?? false) continue
       const animated = (keyframesByItemId[layer.id]?.properties ?? []).filter(
@@ -763,7 +896,7 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
       }
     }
     return { keyframePoints: points, keyframeRefById: refById, contentHeight: top }
-  }, [layers, keyframesByItemId, collapsedByItemId, collapsedGroups, getRenderedKeyframeX])
+  }, [visualRows, keyframesByItemId, collapsedByItemId, collapsedGroups, getRenderedKeyframeX])
 
   const keyframePointsRef = useRef(keyframePoints)
   keyframePointsRef.current = keyframePoints
@@ -1138,7 +1271,7 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
       />
 
       <div ref={scrollAreaRef} className="relative min-h-0 flex-1 overflow-y-auto">
-        {layers.length === 0 ? (
+        {!hasLayers ? (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
             No layers yet
           </div>
@@ -1147,35 +1280,49 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
           // diamonds/bars stopPropagation, and the clientX gate excludes the
           // outliner column.
           <div className="relative min-h-full" onPointerDown={handleTimelineBackgroundPointerDown}>
-            {layers.map((item, index) => (
-              <LayerRow
-                key={item.id}
-                item={item}
-                index={index}
-                compDuration={comp.durationInFrames}
-                viewport={viewport}
-                timelineWidth={timelineWidth}
-                frameToX={frameToX}
-                ticks={tickFrames}
-                getRenderedKeyframeX={getRenderedKeyframeX}
-                itemKeyframes={keyframesByItemId[item.id]}
-                isSelected={item.id === selectedItemId}
-                isCollapsed={collapsedByItemId.get(item.id) ?? false}
-                onToggleCollapse={toggleCollapse}
-                collapsedGroups={collapsedGroups}
-                onToggleGroupCollapse={toggleGroupCollapse}
-                onToggleGroupKeyframes={toggleGroupKeyframes}
-                onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
-                playheadFrame={currentFrame}
-                onToggleKeyframe={toggleKeyframeAtPlayhead}
-                selectedKeyframes={selectedKeyframes}
-                onKeyframePointerDown={handleKeyframePointerDown}
-                previewByItemId={previewByItemId}
-                onSegmentEasingChange={handleSegmentEasingChange}
-                onSegmentDragStart={handleSegmentDragStart}
-                onSegmentDragEnd={handleSegmentDragEnd}
-              />
-            ))}
+            {visualRows.map((row, index) =>
+              row.kind === 'folder' ? (
+                <FolderRow
+                  key={`folder:${row.trackId}`}
+                  name={row.name}
+                  depth={row.depth}
+                  from={row.from}
+                  duration={row.duration}
+                  collapsed={collapsedFolders.has(row.trackId)}
+                  onToggle={() => toggleFolder(row.trackId)}
+                  frameToX={frameToX}
+                />
+              ) : (
+                <LayerRow
+                  key={row.item.id}
+                  item={row.item}
+                  index={index}
+                  depth={row.depth}
+                  compDuration={comp.durationInFrames}
+                  viewport={viewport}
+                  timelineWidth={timelineWidth}
+                  frameToX={frameToX}
+                  ticks={tickFrames}
+                  getRenderedKeyframeX={getRenderedKeyframeX}
+                  itemKeyframes={keyframesByItemId[row.item.id]}
+                  isSelected={row.item.id === selectedItemId}
+                  isCollapsed={collapsedByItemId.get(row.item.id) ?? false}
+                  onToggleCollapse={toggleCollapse}
+                  collapsedGroups={collapsedGroups}
+                  onToggleGroupCollapse={toggleGroupCollapse}
+                  onToggleGroupKeyframes={toggleGroupKeyframes}
+                  onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
+                  playheadFrame={currentFrame}
+                  onToggleKeyframe={toggleKeyframeAtPlayhead}
+                  selectedKeyframes={selectedKeyframes}
+                  onKeyframePointerDown={handleKeyframePointerDown}
+                  previewByItemId={previewByItemId}
+                  onSegmentEasingChange={handleSegmentEasingChange}
+                  onSegmentDragStart={handleSegmentDragStart}
+                  onSegmentDragEnd={handleSegmentDragEnd}
+                />
+              ),
+            )}
 
             {marqueeRect && !marqueeJustEndedRef.current && (
               <KeyframeMarqueeOverlay
@@ -1185,7 +1332,7 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
           </div>
         )}
 
-        {layers.length > 0 && (
+        {hasLayers && (
           <div
             className="pointer-events-none absolute inset-y-0 right-0 overflow-hidden"
             style={{ left: timelineContentLeft }}
