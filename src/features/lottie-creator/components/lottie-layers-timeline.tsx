@@ -13,7 +13,11 @@
  * 3c adds a per-property diamond toggle (add/remove a keyframe at the playhead)
  * plus a per-layer "+" picker that starts animating any still property by
  * seeding its first keyframe with the interpolated value at the playhead.
- * Shift-range select, alt-duplicate and marquee box-select are deferred.
+ * Increment 3d adds marquee box-select: dragging from empty timeline space
+ * rubber-bands a selection across every layer (via the shared
+ * `useDopesheetMarquee` hook with a per-layer content-y geometry map), with
+ * shift-add / ctrl-toggle modifiers. Shift-range select and alt-duplicate are
+ * deferred.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { ChevronDown, ChevronRight, Diamond, Plus } from 'lucide-react'
@@ -45,10 +49,12 @@ import { getAnimatablePropertiesForItem, interpolatePropertyValue } from '../dep
 import {
   DopesheetPlayheadLine,
   DopesheetRulerHeader,
+  KeyframeMarqueeOverlay,
   PropertyTimelineCell,
   getFrameAxisX,
   getFrameFromAxisX,
   getVisibleKeyframeX,
+  useDopesheetMarquee,
   useDopesheetViewport,
   type BlockedFrameRange,
   type KeyframeMeta,
@@ -504,6 +510,122 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
     [viewport, timelineWidth],
   )
 
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
+
+  // Marquee geometry: walk the rendered row layout once to place every keyframe
+  // in the same content coordinate space the marquee drags in — x from
+  // `getRenderedKeyframeX` (content-column-local, null when off-viewport), y from
+  // the cumulative row top (header + one KEYFRAME_ROW_HEIGHT per animated
+  // property, skipped when the layer is collapsed). `keyframeRefById` translates
+  // the marquee's hit-id set back into the store's `KeyframeRef`s. This mirrors
+  // exactly what `LayerRow` renders, so the hit-testing tracks the visuals.
+  const {
+    keyframePoints,
+    keyframeRefById,
+    contentHeight: layoutContentHeight,
+  } = useMemo(() => {
+    const points: { keyframeId: string; x: number; y: number }[] = []
+    const refById = new Map<string, KeyframeRef>()
+    let top = 0
+    for (const layer of layers) {
+      top += ROW_HEIGHT
+      if (collapsedByItemId.get(layer.id) ?? false) continue
+      const animated = (keyframesByItemId[layer.id]?.properties ?? []).filter(
+        (p) => p.keyframes.length > 0,
+      )
+      for (const p of animated) {
+        const rowCenterY = top + KEYFRAME_ROW_HEIGHT / 2
+        for (const keyframe of p.keyframes) {
+          refById.set(keyframe.id, {
+            itemId: layer.id,
+            property: p.property,
+            keyframeId: keyframe.id,
+          })
+          const x = getRenderedKeyframeX(keyframe.frame)
+          if (x !== null) points.push({ keyframeId: keyframe.id, x, y: rowCenterY })
+        }
+        top += KEYFRAME_ROW_HEIGHT
+      }
+    }
+    return { keyframePoints: points, keyframeRefById: refById, contentHeight: top }
+  }, [layers, keyframesByItemId, collapsedByItemId, getRenderedKeyframeX])
+
+  const keyframePointsRef = useRef(keyframePoints)
+  keyframePointsRef.current = keyframePoints
+  const keyframeRefByIdRef = useRef(keyframeRefById)
+  keyframeRefByIdRef.current = keyframeRefById
+
+  const getTimelineXFromClientX = useCallback(
+    (clientX: number) => {
+      const node = timelineRef.current
+      if (!node) return 0
+      const rect = node.getBoundingClientRect()
+      return Math.max(0, Math.min(timelineWidth, clientX - rect.left))
+    },
+    [timelineWidth],
+  )
+
+  const getContentYFromClientY = useCallback(
+    (clientY: number) => {
+      const node = scrollAreaRef.current
+      if (!node) return 0
+      const rect = node.getBoundingClientRect()
+      const y = clientY - rect.top + node.scrollTop
+      return Math.max(0, Math.min(Math.max(0, layoutContentHeight), y))
+    },
+    [layoutContentHeight],
+  )
+
+  // Translate the marquee's hit keyframe-ids back to the store's refs. Reads the
+  // ref map (not the memo value) so the window listeners never see a stale map.
+  const handleMarqueeSelectionChange = useCallback((ids: Set<string>) => {
+    const refs: KeyframeRef[] = []
+    for (const id of ids) {
+      const ref = keyframeRefByIdRef.current.get(id)
+      if (ref) refs.push(ref)
+    }
+    const store = useKeyframeSelectionStore.getState()
+    if (refs.length === 0) store.clearSelection()
+    else store.selectKeyframes(refs)
+  }, [])
+
+  const {
+    marqueeRect,
+    marqueeJustEndedRef,
+    getMarqueeModeFromPointerEvent,
+    beginMarqueeSelection,
+  } = useDopesheetMarquee({
+    keyframePointsRef,
+    scrollAreaRef,
+    getTimelineXFromClientX,
+    getContentYFromClientY,
+    onSelectionChange: handleMarqueeSelectionChange,
+  })
+
+  // Start a marquee from empty timeline space. Keyframe diamonds and layer timing
+  // bars stopPropagation on pointer-down, so a bubbled event means empty content
+  // was hit; the clientX gate rejects the outliner column (its buttons/labels
+  // don't stop propagation). Base selection is the current keyframe ids so
+  // shift-add / ctrl-toggle marquees extend it.
+  const handleTimelineBackgroundPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return
+      const node = timelineRef.current
+      if (!node || event.clientX < node.getBoundingClientRect().left) return
+      const base = new Set(
+        useKeyframeSelectionStore.getState().selectedKeyframes.map((r) => r.keyframeId),
+      )
+      beginMarqueeSelection(
+        event.pointerId,
+        event.clientX,
+        event.clientY,
+        getMarqueeModeFromPointerEvent(event),
+        base,
+      )
+    },
+    [beginMarqueeSelection, getMarqueeModeFromPointerEvent],
+  )
+
   // Local (non-store) drag-preview state for keyframe retiming: `previewByItemId`
   // feeds `sheetPreviewFrames` into each dragged keyframe's cell so the move is
   // rendered live without touching the store, then a single `updateKeyframes`
@@ -800,37 +922,48 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
         }
       />
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollAreaRef} className="relative min-h-0 flex-1 overflow-y-auto">
         {layers.length === 0 ? (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
             No layers yet
           </div>
         ) : (
-          layers.map((item, index) => (
-            <LayerRow
-              key={item.id}
-              item={item}
-              index={index}
-              compDuration={comp.durationInFrames}
-              viewport={viewport}
-              timelineWidth={timelineWidth}
-              frameToX={frameToX}
-              ticks={tickFrames}
-              getRenderedKeyframeX={getRenderedKeyframeX}
-              itemKeyframes={keyframesByItemId[item.id]}
-              isSelected={item.id === selectedItemId}
-              isCollapsed={collapsedByItemId.get(item.id) ?? false}
-              onToggleCollapse={toggleCollapse}
-              playheadFrame={currentFrame}
-              onToggleKeyframe={toggleKeyframeAtPlayhead}
-              selectedKeyframes={selectedKeyframes}
-              onKeyframePointerDown={handleKeyframePointerDown}
-              previewByItemId={previewByItemId}
-              onSegmentEasingChange={handleSegmentEasingChange}
-              onSegmentDragStart={handleSegmentDragStart}
-              onSegmentDragEnd={handleSegmentDragEnd}
-            />
-          ))
+          // Empty content-lane pointer-downs bubble here to start a marquee;
+          // diamonds/bars stopPropagation, and the clientX gate excludes the
+          // outliner column.
+          <div className="relative min-h-full" onPointerDown={handleTimelineBackgroundPointerDown}>
+            {layers.map((item, index) => (
+              <LayerRow
+                key={item.id}
+                item={item}
+                index={index}
+                compDuration={comp.durationInFrames}
+                viewport={viewport}
+                timelineWidth={timelineWidth}
+                frameToX={frameToX}
+                ticks={tickFrames}
+                getRenderedKeyframeX={getRenderedKeyframeX}
+                itemKeyframes={keyframesByItemId[item.id]}
+                isSelected={item.id === selectedItemId}
+                isCollapsed={collapsedByItemId.get(item.id) ?? false}
+                onToggleCollapse={toggleCollapse}
+                playheadFrame={currentFrame}
+                onToggleKeyframe={toggleKeyframeAtPlayhead}
+                selectedKeyframes={selectedKeyframes}
+                onKeyframePointerDown={handleKeyframePointerDown}
+                previewByItemId={previewByItemId}
+                onSegmentEasingChange={handleSegmentEasingChange}
+                onSegmentDragStart={handleSegmentDragStart}
+                onSegmentDragEnd={handleSegmentDragEnd}
+              />
+            ))}
+
+            {marqueeRect && !marqueeJustEndedRef.current && (
+              <KeyframeMarqueeOverlay
+                rect={{ ...marqueeRect, x: timelineContentLeft + marqueeRect.x }}
+              />
+            )}
+          </div>
         )}
 
         {layers.length > 0 && (

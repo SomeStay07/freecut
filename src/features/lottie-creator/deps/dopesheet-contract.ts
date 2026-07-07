@@ -15,6 +15,9 @@ export {
 export { DopesheetRulerHeader } from '@/features/keyframes/components/dopesheet-editor/dopesheet-ruler-header'
 export { DopesheetPlayheadLine } from '@/features/keyframes/components/dopesheet-editor/dopesheet-playhead-line'
 export { PropertyTimelineCell } from '@/features/keyframes/components/dopesheet-editor/dopesheet-timeline-cells'
+export { useDopesheetMarquee } from '@/features/keyframes/components/dopesheet-editor/use-dopesheet-marquee'
+export { KeyframeMarqueeOverlay } from '@/features/keyframes/components/keyframe-marquee'
+export type { KeyframeMarqueeRect } from '@/features/keyframes/components/keyframe-marquee'
 export type {
   Viewport,
   KeyframeMeta,
