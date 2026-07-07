@@ -631,7 +631,7 @@ export function LottieCreatorSurface({
           </aside>
         </div>
         {renderDock && (
-          <div className="min-h-0 shrink-0 border-t border-border" style={{ height: 340 }}>
+          <div className="min-h-0 shrink-0 border-t border-border" style={{ height: 420 }}>
             {renderDock()}
           </div>
         )}

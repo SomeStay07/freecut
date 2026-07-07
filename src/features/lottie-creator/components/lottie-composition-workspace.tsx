@@ -14,11 +14,11 @@ import { buildLottieDocument } from '@/infrastructure/lottie/export'
 import { CREATOR_FONT } from '../utils/creator-font'
 import { useCompositionCreatorController } from '../hooks/use-composition-creator-controller'
 import { LottieCreatorSurface } from './lottie-creator-surface'
+import { LottieLayersTimeline } from './lottie-layers-timeline'
 import {
   useCompositionNavigationStore,
   useCompositionsStore,
   useTimelineStore,
-  KeyframeGraphPanel,
 } from '../deps/timeline'
 
 /** Stable placeholder so the controller hook can run before a composition exists. */
@@ -95,15 +95,7 @@ export function LottieCompositionWorkspace() {
           Done
         </Button>
       )}
-      renderDock={() => (
-        <KeyframeGraphPanel
-          isOpen
-          splitView
-          showCloseButton={false}
-          onClose={() => {}}
-          canvasOverride={{ width: comp.width, height: comp.height, fps: comp.fps }}
-        />
-      )}
+      renderDock={() => <LottieLayersTimeline comp={comp} />}
     />
   )
 }
