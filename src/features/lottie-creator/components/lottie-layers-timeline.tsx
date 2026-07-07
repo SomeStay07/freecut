@@ -1,11 +1,13 @@
 /**
- * Fused multi-layer keyframe timeline (Increment 2) for the in-editor Lottie
+ * Fused multi-layer keyframe timeline (Increment 2/3) for the in-editor Lottie
  * creator — an After-Effects-style layer stack sharing one frame
  * viewport/ruler/playhead across every layer. Renders the outliner +
  * per-layer colored timing bars (move/trim) plus, when a layer is expanded,
- * one read-only keyframe sub-row per animated property (via the shared
- * `PropertyTimelineCell`). Keyframe drag/select/easing interaction lands in a
- * later increment.
+ * one keyframe sub-row per animated property (via the shared
+ * `PropertyTimelineCell`). Increment 3 adds keyframe click-select
+ * (ctrl/cmd-click to toggle multi-select) and drag-to-retime with a live
+ * preview and a single undo commit. Shift-range select, alt-duplicate,
+ * marquee box-select, segment easing and add/remove keyframes are deferred.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -13,11 +15,17 @@ import { cn } from '@/shared/ui/cn'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
 import type { ShapeItem, TextItem, TimelineItem } from '@/types/timeline'
-import type { AnimatableProperty, ItemKeyframes, Keyframe } from '@/types/keyframe'
+import type { AnimatableProperty, ItemKeyframes, Keyframe, KeyframeRef } from '@/types/keyframe'
 import { PROPERTY_LABELS } from '@/types/keyframe'
 import { getLayerColor } from '../utils/layer-color'
 import { useLayerBarDrag } from '../hooks/use-layer-bar-drag'
-import { useItemsStore, useKeyframesStore, type SubComposition } from '../deps/timeline'
+import {
+  useItemsStore,
+  useKeyframesStore,
+  useKeyframeSelectionStore,
+  updateKeyframes,
+  type SubComposition,
+} from '../deps/timeline'
 import {
   DopesheetPlayheadLine,
   DopesheetRulerHeader,
@@ -37,10 +45,10 @@ const KEYFRAME_ROW_HEIGHT = 28
 const BAR_HEIGHT = 26
 const TICK_COUNT = 9
 
-// Read-only sub-rows never have selection/blocked ranges/preview state — reuse
+// Sub-rows never have transition-blocked ranges (no transitions in the Lottie
+// composition timeline) or segment-easing/duplicate-drag preview state — reuse
 // stable empty constants so PropertyTimelineCell (React.memo) doesn't see a
 // new reference on every render.
-const EMPTY_SELECTED_KEYFRAME_IDS = new Set<string>()
 const EMPTY_BLOCKED_RANGES: BlockedFrameRange[] = []
 const noop = () => {}
 
@@ -62,6 +70,14 @@ interface KeyframeRowProps {
   frameToX: (frame: number) => number
   getRenderedKeyframeX: (frame: number) => number | null
   accentColor: string
+  selectedKeyframes: KeyframeRef[]
+  onKeyframePointerDown: (
+    itemId: string,
+    property: AnimatableProperty,
+    keyframeId: string,
+    event: PointerEvent<HTMLButtonElement>,
+  ) => void
+  previewByItemId: Map<string, Record<string, number>> | null
 }
 
 function KeyframeRow({
@@ -72,6 +88,9 @@ function KeyframeRow({
   frameToX,
   getRenderedKeyframeX,
   accentColor,
+  selectedKeyframes,
+  onKeyframePointerDown,
+  previewByItemId,
 }: KeyframeRowProps) {
   const keyframeMetaByIdRef = useRef(new Map<string, KeyframeMeta>())
   const renderedKeyframeXById = useMemo(() => {
@@ -82,6 +101,25 @@ function KeyframeRow({
     }
     return map
   }, [keyframes, getRenderedKeyframeX])
+
+  // The cell only holds this property's keyframe ids, so it's harmless (and
+  // cheaper) to keep this per-item rather than per-item-and-property.
+  const selectedKeyframeIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const ref of selectedKeyframes) {
+      if (ref.itemId === itemId) ids.add(ref.keyframeId)
+    }
+    return ids
+  }, [selectedKeyframes, itemId])
+
+  const handleKeyframePointerDown = useCallback(
+    (_property: AnimatableProperty, keyframeId: string, event: PointerEvent<HTMLButtonElement>) => {
+      onKeyframePointerDown(itemId, property, keyframeId, event)
+    },
+    [itemId, property, onKeyframePointerDown],
+  )
+
+  const sheetPreviewFrames = previewByItemId?.get(itemId) ?? null
 
   return (
     <div
@@ -105,13 +143,13 @@ function KeyframeRow({
         getRenderedKeyframeX={getRenderedKeyframeX}
         renderedKeyframeXById={renderedKeyframeXById}
         transitionBlockedRanges={EMPTY_BLOCKED_RANGES}
-        selectedKeyframeIds={EMPTY_SELECTED_KEYFRAME_IDS}
-        disabled
+        selectedKeyframeIds={selectedKeyframeIds}
+        disabled={false}
         onRowPointerDown={noop}
-        onKeyframePointerDown={noop}
+        onKeyframePointerDown={handleKeyframePointerDown}
         setKeyframeButtonRef={noop}
         keyframeMetaByIdRef={keyframeMetaByIdRef}
-        sheetPreviewFrames={null}
+        sheetPreviewFrames={sheetPreviewFrames}
         sheetPreviewDuplicateKeyframeIds={null}
         accentColor={accentColor}
       />
@@ -132,6 +170,14 @@ interface LayerRowProps {
   isSelected: boolean
   isCollapsed: boolean
   onToggleCollapse: (itemId: string) => void
+  selectedKeyframes: KeyframeRef[]
+  onKeyframePointerDown: (
+    itemId: string,
+    property: AnimatableProperty,
+    keyframeId: string,
+    event: PointerEvent<HTMLButtonElement>,
+  ) => void
+  previewByItemId: Map<string, Record<string, number>> | null
 }
 
 function LayerRow({
@@ -147,6 +193,9 @@ function LayerRow({
   isSelected,
   isCollapsed,
   onToggleCollapse,
+  selectedKeyframes,
+  onKeyframePointerDown,
+  previewByItemId,
 }: LayerRowProps) {
   const color = getLayerColor(item, index)
   const {
@@ -239,6 +288,9 @@ function LayerRow({
             frameToX={frameToX}
             getRenderedKeyframeX={getRenderedKeyframeX}
             accentColor={color}
+            selectedKeyframes={selectedKeyframes}
+            onKeyframePointerDown={onKeyframePointerDown}
+            previewByItemId={previewByItemId}
           />
         ))}
     </div>
@@ -251,6 +303,7 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
   const currentFrame = usePlaybackStore((s) => s.currentFrame)
   const selectedItemId = useSelectionStore((s) => s.selectedItemIds[0] ?? null)
   const keyframesByItemId = useKeyframesStore((s) => s.keyframesByItemId)
+  const selectedKeyframes = useKeyframeSelectionStore((s) => s.selectedKeyframes)
 
   const layers = useMemo(() => {
     const orderByTrackId = new Map(tracks.map((t) => [t.id, t.order]))
@@ -297,6 +350,142 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
   const getRenderedKeyframeX = useCallback(
     (frame: number) => getVisibleKeyframeX(frame, viewport, timelineWidth),
     [viewport, timelineWidth],
+  )
+
+  // Local (non-store) drag-preview state for keyframe retiming: `previewByItemId`
+  // feeds `sheetPreviewFrames` into each dragged keyframe's cell so the move is
+  // rendered live without touching the store, then a single `updateKeyframes`
+  // call on pointer-up commits it as one undo step.
+  const [previewByItemId, setPreviewByItemId] = useState<Map<
+    string,
+    Record<string, number>
+  > | null>(null)
+  const dragRef = useRef<{
+    refs: KeyframeRef[]
+    initialFrameById: Map<string, number>
+    startFrame: number
+    pointerId: number
+    moved: boolean
+  } | null>(null)
+  const dragCleanupRef = useRef<(() => void) | null>(null)
+
+  // Latest layout, read from the window listeners so a drag stays correct
+  // across re-renders (mirrors `useLayerBarDrag`'s propsRef pattern).
+  const dragLayoutRef = useRef({ viewport, timelineWidth, compDuration: comp.durationInFrames })
+  dragLayoutRef.current = { viewport, timelineWidth, compDuration: comp.durationInFrames }
+
+  useEffect(() => () => dragCleanupRef.current?.(), [])
+
+  const handleKeyframePointerDown = useCallback(
+    (
+      itemId: string,
+      property: AnimatableProperty,
+      keyframeId: string,
+      event: PointerEvent<HTMLButtonElement>,
+    ) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      const ref: KeyframeRef = { itemId, property, keyframeId }
+      const selectionStore = useKeyframeSelectionStore.getState()
+
+      if (event.ctrlKey || event.metaKey) {
+        selectionStore.toggleSelection(ref)
+        return
+      }
+      if (!selectionStore.isKeyframeSelected(ref)) {
+        selectionStore.selectKeyframe(ref)
+      }
+
+      const refs = useKeyframeSelectionStore.getState().selectedKeyframes
+      const keyframesState = useKeyframesStore.getState()
+      const initialFrameById = new Map<string, number>()
+      for (const r of refs) {
+        const frame = keyframesState.keyframesByItemId[r.itemId]?.properties
+          .find((p) => p.property === r.property)
+          ?.keyframes.find((k) => k.id === r.keyframeId)?.frame
+        if (frame !== undefined) initialFrameById.set(r.keyframeId, frame)
+      }
+
+      const { viewport: startViewport, timelineWidth: startWidth } = dragLayoutRef.current
+      const startFrame = getFrameFromAxisX(event.clientX, startViewport, startWidth)
+
+      dragRef.current = {
+        refs,
+        initialFrameById,
+        startFrame,
+        pointerId: event.pointerId,
+        moved: false,
+      }
+
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {
+        // ignore pointer capture errors (e.g. detached target)
+      }
+
+      const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+        const session = dragRef.current
+        if (!session || session.pointerId !== moveEvent.pointerId) return
+
+        const { viewport, timelineWidth, compDuration } = dragLayoutRef.current
+        const currentFrame = getFrameFromAxisX(moveEvent.clientX, viewport, timelineWidth)
+        const deltaFrames = currentFrame - session.startFrame
+        if (deltaFrames !== 0) session.moved = true
+
+        const next = new Map<string, Record<string, number>>()
+        for (const r of session.refs) {
+          const initialFrame = session.initialFrameById.get(r.keyframeId)
+          if (initialFrame === undefined) continue
+          const newFrame = clampFrame(initialFrame + deltaFrames, compDuration)
+          const forItem = next.get(r.itemId) ?? {}
+          forItem[r.keyframeId] = newFrame
+          next.set(r.itemId, forItem)
+        }
+        setPreviewByItemId(next)
+      }
+
+      const handlePointerEnd = (endEvent: globalThis.PointerEvent) => {
+        const session = dragRef.current
+        if (!session || session.pointerId !== endEvent.pointerId) return
+
+        if (session.moved) {
+          const { viewport, timelineWidth, compDuration } = dragLayoutRef.current
+          const currentFrame = getFrameFromAxisX(endEvent.clientX, viewport, timelineWidth)
+          const deltaFrames = currentFrame - session.startFrame
+
+          const payloads = session.refs.flatMap((r) => {
+            const initialFrame = session.initialFrameById.get(r.keyframeId)
+            if (initialFrame === undefined) return []
+            const newFrame = clampFrame(initialFrame + deltaFrames, compDuration)
+            return [
+              {
+                itemId: r.itemId,
+                property: r.property,
+                keyframeId: r.keyframeId,
+                updates: { frame: newFrame },
+              },
+            ]
+          })
+          if (payloads.length > 0) updateKeyframes(payloads)
+        }
+
+        dragCleanupRef.current?.()
+        dragCleanupRef.current = null
+        dragRef.current = null
+        setPreviewByItemId(null)
+      }
+
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerEnd)
+      window.addEventListener('pointercancel', handlePointerEnd)
+      dragCleanupRef.current = () => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerEnd)
+        window.removeEventListener('pointercancel', handlePointerEnd)
+      }
+    },
+    [],
   )
 
   const rulerDraggingRef = useRef(false)
@@ -412,6 +601,9 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
               isSelected={item.id === selectedItemId}
               isCollapsed={collapsedByItemId.get(item.id) ?? false}
               onToggleCollapse={toggleCollapse}
+              selectedKeyframes={selectedKeyframes}
+              onKeyframePointerDown={handleKeyframePointerDown}
+              previewByItemId={previewByItemId}
             />
           ))
         )}
