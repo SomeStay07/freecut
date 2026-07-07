@@ -33,6 +33,7 @@ import type { CreatorLayer } from '@/types/lottie-creation'
 import type { LayerTreeNode } from '../utils/folder-tree'
 import { buildLottieDocument } from '@/infrastructure/lottie/export'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/shared/ui/cn'
 import type { PresetKind } from '../utils/presets'
 import { useCoordParams } from '../hooks/use-coord-params'
 import { CREATOR_FONT, ensureCreatorFont } from '../utils/creator-font'
@@ -404,16 +405,20 @@ export function LottieCreatorSurface({
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 <span className="flex-1">Layers</span>
-                {selectedIds.length >= 2 && (
-                  <button
-                    type="button"
-                    onClick={() => controller.groupLayers(selectedIds)}
-                    className="flex items-center gap-1 rounded px-1.5 py-0.5 normal-case text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                    title="Group selected layers into a folder"
-                  >
-                    <FolderPlus className="h-3 w-3" /> Group
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => controller.groupLayers(selectedIds)}
+                  disabled={selectedIds.length < 2}
+                  className={cn(
+                    'flex items-center gap-1 rounded px-1.5 py-0.5 normal-case text-[10px]',
+                    selectedIds.length >= 2
+                      ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      : 'cursor-not-allowed text-muted-foreground/40',
+                  )}
+                  title="Group selected layers into a folder (Ctrl/Shift-click to multi-select)"
+                >
+                  <FolderPlus className="h-3 w-3" /> Group
+                </button>
               </div>
               {layers.length === 0 ? (
                 <div className="px-1 py-4 text-center text-xs text-muted-foreground">

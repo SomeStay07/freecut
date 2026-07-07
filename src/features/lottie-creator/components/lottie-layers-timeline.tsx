@@ -39,7 +39,12 @@ import type { AnimatableProperty, ItemKeyframes, Keyframe, KeyframeRef } from '@
 import { PROPERTY_LABELS } from '@/types/keyframe'
 import { getLayerColor } from '../utils/layer-color'
 import { getLayerPropertyBaseValue } from '../utils/keyframe-values'
-import { buildLayerTree, type LayerTreeNode } from '../utils/folder-tree'
+import {
+  buildLayerTree,
+  groupTracksIntoFolder,
+  ungroupFolder as ungroupFolderTracks,
+  type LayerTreeNode,
+} from '../utils/folder-tree'
 import { useLayerBarDrag } from '../hooks/use-layer-bar-drag'
 import {
   useItemsStore,
@@ -51,6 +56,7 @@ import {
   addKeyframes,
   removeKeyframes,
   updateKeyframes,
+  setTracks,
   captureSnapshot,
   type SubComposition,
   type TimelineSnapshot,
@@ -301,6 +307,7 @@ interface LayerRowProps {
   getRenderedKeyframeX: (frame: number) => number | null
   itemKeyframes: ItemKeyframes | undefined
   isSelected: boolean
+  onSelectLayer: (itemId: string, additive: boolean) => void
   isCollapsed: boolean
   onToggleCollapse: (itemId: string) => void
   collapsedGroups: Set<string>
@@ -338,6 +345,7 @@ function LayerRow({
   getRenderedKeyframeX,
   itemKeyframes,
   isSelected,
+  onSelectLayer,
   isCollapsed,
   onToggleCollapse,
   collapsedGroups,
@@ -422,11 +430,19 @@ function LayerRow({
               <ChevronDown className="h-3.5 w-3.5" />
             )}
           </button>
-          <span
-            className="h-2.5 w-2.5 shrink-0 rounded-sm border border-border"
-            style={{ backgroundColor: color }}
-          />
-          <span className="truncate">{item.label}</span>
+          <button
+            type="button"
+            onClick={(event) =>
+              onSelectLayer(item.id, event.ctrlKey || event.metaKey || event.shiftKey)
+            }
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+          >
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-sm border border-border"
+              style={{ backgroundColor: color }}
+            />
+            <span className="truncate">{item.label}</span>
+          </button>
 
           <Popover>
             <PopoverTrigger asChild>
@@ -470,7 +486,10 @@ function LayerRow({
 
         <div className="relative border-l border-border/60">
           <div
-            onPointerDown={onBodyPointerDown}
+            onPointerDown={(event) => {
+              onSelectLayer(item.id, event.ctrlKey || event.metaKey || event.shiftKey)
+              onBodyPointerDown(event)
+            }}
             className={cn(
               'absolute top-1/2 -translate-y-1/2 rounded-sm border cursor-grab active:cursor-grabbing',
               mode === 'move' && 'cursor-grabbing',
@@ -637,7 +656,8 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
   const items = useItemsStore((s) => s.items)
   const tracks = useItemsStore((s) => s.tracks)
   const currentFrame = usePlaybackStore((s) => s.currentFrame)
-  const selectedItemId = useSelectionStore((s) => s.selectedItemIds[0] ?? null)
+  const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
+  const selectedItemIdSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds])
   const keyframesByItemId = useKeyframesStore((s) => s.keyframesByItemId)
   const selectedKeyframes = useKeyframeSelectionStore((s) => s.selectedKeyframes)
   // Use `_updateKeyframe` directly (no undo per call) for live segment-easing drags.
@@ -663,6 +683,54 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
     [tree, collapsedFolders],
   )
   const hasLayers = useMemo(() => items.some(isLayerItem), [items])
+
+  // Click a layer's name or timing bar to select it; ctrl/cmd/shift adds to the
+  // selection so several layers can be grouped together.
+  const handleSelectLayer = useCallback((itemId: string, additive: boolean) => {
+    const selection = useSelectionStore.getState()
+    if (additive) {
+      const current = selection.selectedItemIds
+      selection.selectItems(
+        current.includes(itemId) ? current.filter((x) => x !== itemId) : [...current, itemId],
+      )
+      return
+    }
+    selection.selectItems([itemId])
+  }, [])
+
+  const trackIdOfItem = useCallback((itemId: string) => {
+    return useItemsStore.getState().items.find((it) => it.id === itemId)?.trackId
+  }, [])
+
+  const handleGroupSelection = useCallback(() => {
+    const state = useItemsStore.getState()
+    const ids = useSelectionStore.getState().selectedItemIds
+    const memberTrackIds = ids
+      .map((id) => state.items.find((it) => it.id === id)?.trackId)
+      .filter((trackId): trackId is string => trackId !== undefined)
+    if (memberTrackIds.length < 2) return
+    setTracks(groupTracksIntoFolder(state.tracks, memberTrackIds, crypto.randomUUID(), 'Group'))
+  }, [])
+
+  // Ungroup the folder that the current selection lives in.
+  const handleUngroupSelection = useCallback(() => {
+    const state = useItemsStore.getState()
+    const firstId = useSelectionStore.getState().selectedItemIds[0]
+    const trackId = firstId ? trackIdOfItem(firstId) : undefined
+    const folderId = state.tracks.find((t) => t.id === trackId)?.parentTrackId
+    if (folderId) setTracks(ungroupFolderTracks(state.tracks, folderId))
+  }, [trackIdOfItem])
+
+  // Toolbar affordances: group needs ≥2 selected; ungroup needs the selection to
+  // sit inside a folder.
+  const selectionParentFolderId = useMemo(() => {
+    const firstId = selectedItemIds[0]
+    if (!firstId) return undefined
+    const trackId = items.find((it) => it.id === firstId)?.trackId
+    return tracks.find((t) => t.id === trackId)?.parentTrackId
+  }, [selectedItemIds, items, tracks])
+  const canGroup = selectedItemIds.length >= 2
+  const canUngroup = selectionParentFolderId !== undefined
 
   const [collapsedByItemId, setCollapsedByItemId] = useState<Map<string, boolean>>(new Map())
   const toggleCollapse = useCallback((itemId: string) => {
@@ -1250,6 +1318,41 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex items-center gap-1 border-b border-border bg-muted/25 px-2 py-1 text-[11px]">
+        <button
+          type="button"
+          onClick={handleGroupSelection}
+          disabled={!canGroup}
+          className={cn(
+            'flex items-center gap-1 rounded px-1.5 py-0.5',
+            canGroup
+              ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              : 'cursor-not-allowed text-muted-foreground/40',
+          )}
+          title="Group selected layers into a folder"
+        >
+          <FolderOpen className="h-3 w-3" /> Group
+        </button>
+        <button
+          type="button"
+          onClick={handleUngroupSelection}
+          disabled={!canUngroup}
+          className={cn(
+            'rounded px-1.5 py-0.5',
+            canUngroup
+              ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              : 'cursor-not-allowed text-muted-foreground/40',
+          )}
+          title="Ungroup the selection's folder"
+        >
+          Ungroup
+        </button>
+        <span className="ml-auto text-muted-foreground/60">
+          {selectedItemIds.length > 0
+            ? `${selectedItemIds.length} selected`
+            : 'Click a layer to select · Ctrl/Shift-click for many'}
+        </span>
+      </div>
       <DopesheetRulerHeader
         propertyGridStyle={propertyGridStyle}
         timelineRef={timelineRef}
@@ -1305,7 +1408,8 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
                   ticks={tickFrames}
                   getRenderedKeyframeX={getRenderedKeyframeX}
                   itemKeyframes={keyframesByItemId[row.item.id]}
-                  isSelected={row.item.id === selectedItemId}
+                  isSelected={selectedItemIdSet.has(row.item.id)}
+                  onSelectLayer={handleSelectLayer}
                   isCollapsed={collapsedByItemId.get(row.item.id) ?? false}
                   onToggleCollapse={toggleCollapse}
                   collapsedGroups={collapsedGroups}

@@ -88,7 +88,9 @@ export function CreatorLayerTree({
         return (
           <li key={item.id}>
             <button
-              onClick={(event) => onSelectLayer(item.id, event.ctrlKey || event.metaKey)}
+              onClick={(event) =>
+                onSelectLayer(item.id, event.ctrlKey || event.metaKey || event.shiftKey)
+              }
               className={cn(
                 'group flex w-full items-center gap-2 rounded py-1.5 pr-2 text-left text-xs',
                 isSelected
