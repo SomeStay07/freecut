@@ -14,7 +14,12 @@ export {
 } from '@/features/keyframes/components/dopesheet-editor/layout'
 export { DopesheetRulerHeader } from '@/features/keyframes/components/dopesheet-editor/dopesheet-ruler-header'
 export { DopesheetPlayheadLine } from '@/features/keyframes/components/dopesheet-editor/dopesheet-playhead-line'
-export { PropertyTimelineCell } from '@/features/keyframes/components/dopesheet-editor/dopesheet-timeline-cells'
+export {
+  PropertyTimelineCell,
+  GroupTimelineCell,
+} from '@/features/keyframes/components/dopesheet-editor/dopesheet-timeline-cells'
+export { buildGroupedPropertyStructure } from '@/features/keyframes/components/dopesheet-editor/dopesheet-helpers'
+export type { DopesheetPropertyGroupStructure } from '@/features/keyframes/components/dopesheet-editor/dopesheet-helpers'
 export { useDopesheetMarquee } from '@/features/keyframes/components/dopesheet-editor/use-dopesheet-marquee'
 export { KeyframeMarqueeOverlay } from '@/features/keyframes/components/keyframe-marquee'
 export type { KeyframeMarqueeRect } from '@/features/keyframes/components/keyframe-marquee'

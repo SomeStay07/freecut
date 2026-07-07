@@ -16,8 +16,12 @@
  * Increment 3d adds marquee box-select: dragging from empty timeline space
  * rubber-bands a selection across every layer (via the shared
  * `useDopesheetMarquee` hook with a per-layer content-y geometry map), with
- * shift-add / ctrl-toggle modifiers. Shift-range select and alt-duplicate are
- * deferred.
+ * shift-add / ctrl-toggle modifiers. Property groups bucket each layer's
+ * animated properties into collapsible headers (Transform/Effects/…), reusing
+ * the video dopesheet's `buildGroupedPropertyStructure` + `GroupTimelineCell`
+ * (aggregate diamonds, group segment easing, a group playhead ◆ toggle, and
+ * click-to-select of a stacked group keyframe). Group-diamond drag-retime,
+ * shift-range select and alt-duplicate are deferred.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { ChevronDown, ChevronRight, Diamond, Plus } from 'lucide-react'
@@ -39,6 +43,7 @@ import {
   useTimelineCommandStore,
   useTimelineSettingsStore,
   addKeyframe,
+  addKeyframes,
   removeKeyframes,
   updateKeyframes,
   captureSnapshot,
@@ -49,14 +54,17 @@ import { getAnimatablePropertiesForItem, interpolatePropertyValue } from '../dep
 import {
   DopesheetPlayheadLine,
   DopesheetRulerHeader,
+  GroupTimelineCell,
   KeyframeMarqueeOverlay,
   PropertyTimelineCell,
+  buildGroupedPropertyStructure,
   getFrameAxisX,
   getFrameFromAxisX,
   getVisibleKeyframeX,
   useDopesheetMarquee,
   useDopesheetViewport,
   type BlockedFrameRange,
+  type DopesheetPropertyGroupStructure,
   type KeyframeMeta,
   type SegmentEasingChange,
   type Viewport,
@@ -65,8 +73,18 @@ import {
 const OUTLINER_WIDTH = 208
 const ROW_HEIGHT = 40
 const KEYFRAME_ROW_HEIGHT = 28
+const GROUP_HEADER_HEIGHT = 24
 const BAR_HEIGHT = 26
 const TICK_COUNT = 9
+
+/** A layer's animated properties bucketed into collapsible groups (Transform/etc.). */
+type PropertyGroup = DopesheetPropertyGroupStructure<{
+  property: AnimatableProperty
+  keyframes: Keyframe[]
+}>
+type FrameGroup = PropertyGroup['frameGroups'][number]
+
+const groupKey = (itemId: string, groupId: string) => `${itemId}::${groupId}`
 
 // Sub-rows never have transition-blocked ranges (no transitions in the Lottie
 // composition timeline) or duplicate-drag preview state — reuse stable empty
@@ -74,6 +92,7 @@ const TICK_COUNT = 9
 // on every render.
 const EMPTY_BLOCKED_RANGES: BlockedFrameRange[] = []
 const noop = () => {}
+const returnFalse = () => false
 
 type LayerItem = ShapeItem | TextItem
 
@@ -223,6 +242,14 @@ interface LayerRowProps {
   isSelected: boolean
   isCollapsed: boolean
   onToggleCollapse: (itemId: string) => void
+  collapsedGroups: Set<string>
+  onToggleGroupCollapse: (key: string) => void
+  onToggleGroupKeyframes: (itemId: string, group: PropertyGroup) => void
+  onGroupKeyframePointerDown: (
+    itemId: string,
+    frameGroup: FrameGroup,
+    event: PointerEvent<HTMLButtonElement>,
+  ) => void
   playheadFrame: number
   onToggleKeyframe: (itemId: string, property: AnimatableProperty) => void
   selectedKeyframes: KeyframeRef[]
@@ -251,6 +278,10 @@ function LayerRow({
   isSelected,
   isCollapsed,
   onToggleCollapse,
+  collapsedGroups,
+  onToggleGroupCollapse,
+  onToggleGroupKeyframes,
+  onGroupKeyframePointerDown,
   playheadFrame,
   onToggleKeyframe,
   selectedKeyframes,
@@ -292,6 +323,20 @@ function LayerRow({
     () => new Set(animatedProperties.map((p) => p.property)),
     [animatedProperties],
   )
+
+  // Bucket the animated properties into collapsible groups (Transform/Effects/…),
+  // exactly like the video keyframe dopesheet. Group headers show the union of
+  // the group's keyframes as aggregate diamonds via GroupTimelineCell.
+  const groups = useMemo(
+    () => buildGroupedPropertyStructure(animatedProperties),
+    [animatedProperties],
+  )
+  const selectedKeyframeIdsForItem = useMemo(() => {
+    const ids = new Set<string>()
+    for (const ref of selectedKeyframes) if (ref.itemId === item.id) ids.add(ref.keyframeId)
+    return ids
+  }, [selectedKeyframes, item.id])
+  const sheetPreviewFramesForItem = previewByItemId?.get(item.id) ?? null
 
   return (
     <div>
@@ -388,26 +433,89 @@ function LayerRow({
       </div>
 
       {!isCollapsed &&
-        animatedProperties.map((p) => (
-          <KeyframeRow
-            key={p.property}
-            itemId={item.id}
-            property={p.property}
-            keyframes={p.keyframes}
-            ticks={ticks}
-            frameToX={frameToX}
-            getRenderedKeyframeX={getRenderedKeyframeX}
-            accentColor={color}
-            playheadFrame={playheadFrame}
-            onToggleKeyframe={onToggleKeyframe}
-            selectedKeyframes={selectedKeyframes}
-            onKeyframePointerDown={onKeyframePointerDown}
-            previewByItemId={previewByItemId}
-            onSegmentEasingChange={onSegmentEasingChange}
-            onSegmentDragStart={onSegmentDragStart}
-            onSegmentDragEnd={onSegmentDragEnd}
-          />
-        ))}
+        groups.map((group) => {
+          const key = groupKey(item.id, group.id)
+          const groupCollapsed = collapsedGroups.has(key)
+          return (
+            <div key={group.id}>
+              <div
+                className="grid border-b border-border/40"
+                style={{
+                  gridTemplateColumns: `${OUTLINER_WIDTH}px 1fr`,
+                  height: GROUP_HEADER_HEIGHT,
+                }}
+              >
+                <div className="flex items-center gap-1 truncate pl-4 text-[11px] font-medium text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={() => onToggleGroupCollapse(key)}
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+                    aria-label={groupCollapsed ? 'Expand group' : 'Collapse group'}
+                  >
+                    {groupCollapsed ? (
+                      <ChevronRight className="h-3 w-3" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onToggleGroupKeyframes(item.id, group)}
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm hover:bg-accent"
+                    aria-label="Toggle keyframes for group at playhead"
+                  >
+                    <Diamond className="h-2.5 w-2.5 text-muted-foreground/70" />
+                  </button>
+                  <span className="truncate uppercase">{group.label}</span>
+                </div>
+                <GroupTimelineCell
+                  itemId={item.id}
+                  groupId={group.id}
+                  groupLabel={group.label}
+                  frameGroups={group.frameGroups}
+                  rows={group.rows}
+                  ticks={ticks}
+                  frameToX={frameToX}
+                  getRenderedKeyframeX={getRenderedKeyframeX}
+                  selectedKeyframeIds={selectedKeyframeIdsForItem}
+                  disabled={false}
+                  isPropertyLocked={returnFalse}
+                  onGroupKeyframePointerDown={(frameGroup, event) =>
+                    onGroupKeyframePointerDown(item.id, frameGroup, event)
+                  }
+                  onBackgroundPointerDown={noop}
+                  onSegmentEasingChange={onSegmentEasingChange}
+                  onSegmentDragStart={onSegmentDragStart}
+                  onSegmentDragEnd={onSegmentDragEnd}
+                  sheetPreviewFrames={sheetPreviewFramesForItem}
+                  sheetPreviewDuplicateKeyframeIds={null}
+                />
+              </div>
+
+              {!groupCollapsed &&
+                group.rows.map((row) => (
+                  <KeyframeRow
+                    key={row.property}
+                    itemId={item.id}
+                    property={row.property}
+                    keyframes={row.keyframes}
+                    ticks={ticks}
+                    frameToX={frameToX}
+                    getRenderedKeyframeX={getRenderedKeyframeX}
+                    accentColor={color}
+                    playheadFrame={playheadFrame}
+                    onToggleKeyframe={onToggleKeyframe}
+                    selectedKeyframes={selectedKeyframes}
+                    onKeyframePointerDown={onKeyframePointerDown}
+                    previewByItemId={previewByItemId}
+                    onSegmentEasingChange={onSegmentEasingChange}
+                    onSegmentDragStart={onSegmentDragStart}
+                    onSegmentDragEnd={onSegmentDragEnd}
+                  />
+                ))}
+            </div>
+          )
+        })}
     </div>
   )
 }
@@ -435,6 +543,19 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
     setCollapsedByItemId((prev) => {
       const next = new Map(prev)
       next.set(itemId, !(prev.get(itemId) ?? false))
+      return next
+    })
+  }, [])
+
+  // Property groups default expanded; this Set holds the collapsed `itemId::groupId`
+  // keys. Lifted here (not local to LayerRow) so the marquee geometry walk below
+  // can account for which group member rows are currently visible.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const toggleGroupCollapse = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }, [])
@@ -478,6 +599,82 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
       addKeyframe(itemId, property, frame, value)
     },
     [comp.durationInFrames, canvas],
+  )
+
+  // Group diamond in the outliner: toggle keyframes at the playhead across every
+  // property in the group. If any group property lacks a keyframe there, add to
+  // all the missing ones (one undo step); otherwise every property has one, so
+  // remove them all. Mirrors the video dopesheet's group toggle.
+  const toggleGroupKeyframes = useCallback(
+    (itemId: string, group: PropertyGroup) => {
+      const item = useItemsStore.getState().items.find((it) => it.id === itemId)
+      if (!item || !isLayerItem(item)) return
+
+      const frame = clampFrame(usePlaybackStore.getState().currentFrame, comp.durationInFrames)
+      const byProperty = useKeyframesStore.getState().keyframesByItemId[itemId]?.properties ?? []
+      const keyframesFor = (property: AnimatableProperty) =>
+        byProperty.find((p) => p.property === property)?.keyframes ?? []
+
+      const properties = group.rows.map((row) => row.property)
+      const missing = properties.filter((p) => !keyframesFor(p).some((k) => k.frame === frame))
+
+      if (missing.length > 0) {
+        addKeyframes(
+          missing.map((property) => ({
+            itemId,
+            property,
+            frame,
+            value: interpolatePropertyValue(
+              keyframesFor(property),
+              frame,
+              getLayerPropertyBaseValue(item, property, canvas),
+            ),
+          })),
+        )
+        return
+      }
+
+      const refs = properties.flatMap((property) => {
+        const existing = keyframesFor(property).find((k) => k.frame === frame)
+        return existing ? [{ itemId, property, keyframeId: existing.id }] : []
+      })
+      if (refs.length > 0) removeKeyframes(refs)
+    },
+    [comp.durationInFrames, canvas],
+  )
+
+  // Group diamond in the timeline (a stacked keyframe on the group header row):
+  // select every keyframe parked at that frame across the group's properties,
+  // with shift-add / ctrl-toggle modifiers (drag-retime of the aggregate is a
+  // follow-up; the expanded member rows already drag individually).
+  const handleGroupKeyframePointerDown = useCallback(
+    (itemId: string, frameGroup: FrameGroup, event: PointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return
+      event.preventDefault()
+      event.stopPropagation()
+
+      const refs: KeyframeRef[] = frameGroup.keyframes.map(({ property, keyframe }) => ({
+        itemId,
+        property,
+        keyframeId: keyframe.id,
+      }))
+      const store = useKeyframeSelectionStore.getState()
+
+      if (event.ctrlKey || event.metaKey) {
+        for (const ref of refs) store.toggleSelection(ref)
+        return
+      }
+      if (event.shiftKey) {
+        const union = [
+          ...store.selectedKeyframes,
+          ...refs.filter((ref) => !store.isKeyframeSelected(ref)),
+        ]
+        store.selectKeyframes(union)
+        return
+      }
+      store.selectKeyframes(refs)
+    },
+    [],
   )
 
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -533,22 +730,40 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
       const animated = (keyframesByItemId[layer.id]?.properties ?? []).filter(
         (p) => p.keyframes.length > 0,
       )
-      for (const p of animated) {
-        const rowCenterY = top + KEYFRAME_ROW_HEIGHT / 2
-        for (const keyframe of p.keyframes) {
-          refById.set(keyframe.id, {
-            itemId: layer.id,
-            property: p.property,
-            keyframeId: keyframe.id,
-          })
-          const x = getRenderedKeyframeX(keyframe.frame)
-          if (x !== null) points.push({ keyframeId: keyframe.id, x, y: rowCenterY })
+      for (const group of buildGroupedPropertyStructure(animated)) {
+        // Group header row: its aggregate diamonds sit at each frame-group, so a
+        // marquee over the header (e.g. while the group is collapsed) still hits
+        // the underlying keyframes.
+        const headerCenterY = top + GROUP_HEADER_HEIGHT / 2
+        for (const frameGroup of group.frameGroups) {
+          const x = getRenderedKeyframeX(frameGroup.frame)
+          if (x === null) continue
+          for (const { keyframe } of frameGroup.keyframes) {
+            points.push({ keyframeId: keyframe.id, x, y: headerCenterY })
+          }
         }
-        top += KEYFRAME_ROW_HEIGHT
+        top += GROUP_HEADER_HEIGHT
+
+        const groupExpanded = !collapsedGroups.has(groupKey(layer.id, group.id))
+        for (const row of group.rows) {
+          const rowCenterY = top + KEYFRAME_ROW_HEIGHT / 2
+          for (const keyframe of row.keyframes) {
+            refById.set(keyframe.id, {
+              itemId: layer.id,
+              property: row.property,
+              keyframeId: keyframe.id,
+            })
+            if (groupExpanded) {
+              const x = getRenderedKeyframeX(keyframe.frame)
+              if (x !== null) points.push({ keyframeId: keyframe.id, x, y: rowCenterY })
+            }
+          }
+          if (groupExpanded) top += KEYFRAME_ROW_HEIGHT
+        }
       }
     }
     return { keyframePoints: points, keyframeRefById: refById, contentHeight: top }
-  }, [layers, keyframesByItemId, collapsedByItemId, getRenderedKeyframeX])
+  }, [layers, keyframesByItemId, collapsedByItemId, collapsedGroups, getRenderedKeyframeX])
 
   const keyframePointsRef = useRef(keyframePoints)
   keyframePointsRef.current = keyframePoints
@@ -947,6 +1162,10 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
                 isSelected={item.id === selectedItemId}
                 isCollapsed={collapsedByItemId.get(item.id) ?? false}
                 onToggleCollapse={toggleCollapse}
+                collapsedGroups={collapsedGroups}
+                onToggleGroupCollapse={toggleGroupCollapse}
+                onToggleGroupKeyframes={toggleGroupKeyframes}
+                onGroupKeyframePointerDown={handleGroupKeyframePointerDown}
                 playheadFrame={currentFrame}
                 onToggleKeyframe={toggleKeyframeAtPlayhead}
                 selectedKeyframes={selectedKeyframes}
