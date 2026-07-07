@@ -31,7 +31,7 @@ import type { TransformProperties } from '@/types/transform'
 import type { CreatorLayer } from '@/types/lottie-creation'
 import type { LayerTreeNode } from '../utils/folder-tree'
 import type { DropTarget } from '../utils/reorder-tree'
-import { buildLottieDocument } from '@/infrastructure/lottie/export'
+import { buildLottieDocument, type LottieExportNode } from '@/infrastructure/lottie/export'
 import { Button } from '@/components/ui/button'
 import type { PresetKind } from '../utils/presets'
 import { useCoordParams } from '../hooks/use-coord-params'
@@ -45,6 +45,15 @@ import { TemplateGallery, type TemplateDocument } from './template-gallery'
 
 /** The built Lottie document handed to the header slots. */
 type LottieDocument = ReturnType<typeof buildLottieDocument>['document']
+
+/** Map the creator's layer tree to the exporter's node tree (folders → precomps). */
+function toExportTree(nodes: LayerTreeNode[]): LottieExportNode[] {
+  return nodes.map((node) =>
+    node.type === 'folder'
+      ? { type: 'folder', name: node.name, children: toExportTree(node.children) }
+      : { type: 'layer', item: node.item },
+  )
+}
 
 /**
  * Everything the surface needs to read and mutate a Lottie document. Backed by
@@ -210,13 +219,14 @@ export function LottieCreatorSurface({
       name: name || 'Lottie Creation',
       fontName: CREATOR_FONT,
       keyframes,
+      tree: toExportTree(layerTree),
     })
     return {
       data: JSON.stringify(result.document),
       doc: result.document,
       warnings: result.warnings,
     }
-  }, [layers, fps, width, height, durationInFrames, name])
+  }, [layers, layerTree, fps, width, height, durationInFrames, name])
 
   // Playback loop — advance the playhead in real time (looping at duration).
   // Read `advance` through a ref so the loop doesn't re-subscribe when the

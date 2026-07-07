@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest'
 import type { ShapeItem, TextItem, VideoItem, TimelineItem } from '@/types/timeline'
 import type { ItemKeyframes } from '@/types/keyframe'
 import { buildLottieDocument } from './build-lottie-document'
-import type { LottieGroup, LottieShapeLayer, LottieShapePath } from './lottie-schema'
+import type {
+  LottieGroup,
+  LottiePrecompLayer,
+  LottieShapeLayer,
+  LottieShapePath,
+} from './lottie-schema'
 
 function rect(partial: Partial<ShapeItem> = {}): ShapeItem {
   return {
@@ -165,5 +170,75 @@ describe('buildLottieDocument', () => {
     expect(recovered[1]).toEqual([1, 0.25])
     expect(recovered[2]).toEqual([0.5, 1])
     expect(bezier.c).toBe(true)
+  })
+})
+
+describe('buildLottieDocument precomps (folder tree)', () => {
+  it('emits a folder as a native precomp asset + ty:0 layer', () => {
+    const a = rect({ id: 'a', label: 'A' })
+    const b = rect({ id: 'b', label: 'B' })
+    const top = rect({ id: 'top', label: 'Top' })
+    const { document } = buildLottieDocument([a, b, top], {
+      ...CANVAS,
+      tree: [
+        {
+          type: 'folder',
+          name: 'Group 1',
+          children: [
+            { type: 'layer', item: a },
+            { type: 'layer', item: b },
+          ],
+        },
+        { type: 'layer', item: top },
+      ],
+    })
+
+    // Main comp: a precomp layer (ty:0) on top, then the top-level shape.
+    expect(document.layers).toHaveLength(2)
+    const precompLayer = document.layers[0] as LottiePrecompLayer
+    expect(precompLayer.ty).toBe(0)
+    expect(precompLayer.nm).toBe('Group 1')
+    expect(precompLayer.refId).toBe('comp_0')
+    expect(precompLayer.ind).toBe(1)
+    expect((document.layers[1] as LottieShapeLayer).ty).toBe(4)
+
+    // One precomp asset holding the two folder children (top-first).
+    expect(document.assets).toHaveLength(1)
+    expect(document.assets[0]!.id).toBe('comp_0')
+    expect(document.assets[0]!.layers.map((l) => l.nm)).toEqual(['A', 'B'])
+    expect(document.assets[0]!.layers.map((l) => l.ind)).toEqual([1, 2])
+  })
+
+  it('nests folders as nested precomps', () => {
+    const leaf = rect({ id: 'leaf', label: 'Leaf' })
+    const { document } = buildLottieDocument([leaf], {
+      ...CANVAS,
+      tree: [
+        {
+          type: 'folder',
+          name: 'Outer',
+          children: [{ type: 'folder', name: 'Inner', children: [{ type: 'layer', item: leaf }] }],
+        },
+      ],
+    })
+
+    // Two precomp assets (inner emitted first → comp_0, outer → comp_1).
+    expect(document.assets.map((a) => a.id)).toEqual(['comp_0', 'comp_1'])
+    expect(document.layers).toHaveLength(1)
+    const outerLayer = document.layers[0] as LottiePrecompLayer
+    expect(outerLayer.ty).toBe(0)
+    expect(outerLayer.refId).toBe('comp_1')
+
+    const inner = document.assets.find((a) => a.id === 'comp_0')!
+    expect(inner.layers.map((l) => l.nm)).toEqual(['Leaf'])
+    const outer = document.assets.find((a) => a.id === 'comp_1')!
+    expect((outer.layers[0] as LottiePrecompLayer).refId).toBe('comp_0')
+  })
+
+  it('matches the flat output when no tree is passed', () => {
+    const flat = buildLottieDocument([rect()], CANVAS)
+    expect(flat.document.assets).toHaveLength(0)
+    expect(flat.document.layers).toHaveLength(1)
+    expect((flat.document.layers[0] as LottieShapeLayer).ty).toBe(4)
   })
 })

@@ -8,6 +8,7 @@
  */
 export { buildLottieDocument } from './build-lottie-document'
 export type {
+  LottieExportNode,
   LottieExportOptions,
   LottieExportResult,
   LottieExportWarning,

@@ -193,7 +193,33 @@ export interface LottieTextLayer {
   bm: number
 }
 
-export type LottieLayer = LottieShapeLayer | LottieTextLayer
+/** Precomposition layer (`ty: 0`) — references a precomp asset by `refId`. */
+export interface LottiePrecompLayer {
+  ddd: 0
+  ind: number
+  ty: 0
+  nm: string
+  refId: string
+  sr: 1
+  ks: LottieTransform
+  ao: 0
+  /** Referenced comp width/height. */
+  w: number
+  h: number
+  ip: number
+  op: number
+  st: number
+  bm: number
+}
+
+export type LottieLayer = LottieShapeLayer | LottieTextLayer | LottiePrecompLayer
+
+/** Precomposition asset — a nested comp (a folder) referenced by a `ty:0` layer. */
+export interface LottiePrecompAsset {
+  id: string
+  nm?: string
+  layers: LottieLayer[]
+}
 
 export interface LottieDocument {
   v: string
@@ -204,7 +230,7 @@ export interface LottieDocument {
   h: number
   nm: string
   ddd: 0
-  assets: unknown[]
+  assets: LottiePrecompAsset[]
   fonts?: { list: LottieFont[] }
   layers: LottieLayer[]
   markers: unknown[]
