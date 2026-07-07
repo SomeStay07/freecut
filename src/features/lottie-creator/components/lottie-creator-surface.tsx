@@ -13,7 +13,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Circle,
   FileJson,
-  FolderPlus,
   Heart,
   Hexagon,
   LayoutTemplate,
@@ -34,14 +33,14 @@ import type { LayerTreeNode } from '../utils/folder-tree'
 import type { DropTarget } from '../utils/reorder-tree'
 import { buildLottieDocument } from '@/infrastructure/lottie/export'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/shared/ui/cn'
 import type { PresetKind } from '../utils/presets'
 import { useCoordParams } from '../hooks/use-coord-params'
 import { CREATOR_FONT, ensureCreatorFont } from '../utils/creator-font'
 import { LottieLivePreview } from './lottie-live-preview'
 import { CreatorTransformGizmo } from './creator-transform-gizmo'
 import { CreatorLayerHitAreas } from './creator-layer-hit-areas'
-import { CreatorLayerTree } from './creator-layer-tree'
+import { CreatorLayerTree, type LayerTreeMenuActions } from './creator-layer-tree'
+import { useCreatorClipboardStore } from '../stores/creator-clipboard'
 import { TemplateGallery, type TemplateDocument } from './template-gallery'
 
 /** The built Lottie document handed to the header slots. */
@@ -76,8 +75,18 @@ export interface CreatorController {
   groupLayers: (layerIds: string[]) => void
   /** Dissolve a folder track, raising its children one level. */
   ungroupFolder: (folderTrackId: string) => void
+  /** Dissolve the folder that currently holds the selection. */
+  ungroupSelection: () => void
   /** Reorder/reparent a layer or folder track via drag-and-drop. */
   moveTrack: (sourceTrackId: string, target: DropTarget) => void
+  /** Copy the given layers (item + keyframes) to the creator clipboard. */
+  copyLayers: (layerIds: string[]) => void
+  /** Paste the clipboard layers as fresh top-of-stack layers. */
+  pasteLayers: () => void
+  /** Duplicate the given layers in place (copy + paste in one step). */
+  duplicateLayers: (layerIds: string[]) => void
+  /** Remove the given layers (and their keyframes). */
+  removeLayers: (layerIds: string[]) => void
   selectLayer: (id: string | null, additive?: boolean) => void
   updateTransform: (id: string, patch: Partial<TransformProperties>) => void
   updateShape: (id: string, patch: Partial<ShapeItem>) => void
@@ -253,6 +262,48 @@ export function LottieCreatorSurface({
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // Layer shortcuts (group/ungroup/copy/paste/duplicate/delete). Capture phase +
+  // stopPropagation so, while the creator is open, they win over the main
+  // editor's identically-bound global hotkeys (which act on the same stores).
+  const controllerRef = useRef(controller)
+  controllerRef.current = controller
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+      const c = controllerRef.current
+      const selected = c.selectedIds
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey) {
+        if (selected.length === 0) return
+        e.preventDefault()
+        e.stopPropagation()
+        c.removeLayers(selected)
+        return
+      }
+
+      if (!(e.ctrlKey || e.metaKey)) return
+      const key = e.key.toLowerCase()
+      const handle = (fn: () => void) => {
+        e.preventDefault()
+        e.stopPropagation()
+        fn()
+      }
+
+      if (key === 'g') {
+        handle(() => (e.shiftKey ? c.ungroupSelection() : c.groupLayers(selected)))
+      } else if (key === 'c' && selected.length > 0) {
+        handle(() => c.copyLayers(selected))
+      } else if (key === 'v') {
+        handle(() => c.pasteLayers())
+      } else if (key === 'd' && selected.length > 0) {
+        handle(() => c.duplicateLayers(selected))
+      }
+    }
+    window.addEventListener('keydown', onKey, { capture: true })
+    return () => window.removeEventListener('keydown', onKey, { capture: true })
+  }, [])
+
   // Register the text font once; bump the token when it lands so the preview
   // rebuilds and any text renders (instead of blank).
   const [fontEpoch, setFontEpoch] = useState(0)
@@ -281,6 +332,21 @@ export function LottieCreatorSurface({
       return next
     })
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const clipboardHasLayers = useCreatorClipboardStore((s) => s.layers.length > 0)
+  const layerMenu = useMemo<LayerTreeMenuActions>(
+    () => ({
+      selectedCount: selectedIds.length,
+      canPaste: clipboardHasLayers,
+      groupSelection: () => controller.groupLayers(selectedIds),
+      ungroupFolder: (folderTrackId) => controller.ungroupFolder(folderTrackId),
+      ungroupSelection: () => controller.ungroupSelection(),
+      copy: () => controller.copyLayers(selectedIds),
+      paste: () => controller.pasteLayers(),
+      duplicate: () => controller.duplicateLayers(selectedIds),
+      remove: () => controller.removeLayers(selectedIds),
+    }),
+    [selectedIds, clipboardHasLayers, controller],
+  )
 
   const previewBoxRef = useRef<HTMLDivElement>(null)
   const coordParams = useCoordParams(previewBoxRef, width, height)
@@ -408,20 +474,9 @@ export function LottieCreatorSurface({
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 <span className="flex-1">Layers</span>
-                <button
-                  type="button"
-                  onClick={() => controller.groupLayers(selectedIds)}
-                  disabled={selectedIds.length < 2}
-                  className={cn(
-                    'flex items-center gap-1 rounded px-1.5 py-0.5 normal-case text-[10px]',
-                    selectedIds.length >= 2
-                      ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      : 'cursor-not-allowed text-muted-foreground/40',
-                  )}
-                  title="Group selected layers into a folder (Ctrl/Shift-click to multi-select)"
-                >
-                  <FolderPlus className="h-3 w-3" /> Group
-                </button>
+                <span className="normal-case text-[10px] text-muted-foreground/50">
+                  Right-click for actions
+                </span>
               </div>
               {layers.length === 0 ? (
                 <div className="px-1 py-4 text-center text-xs text-muted-foreground">
@@ -439,6 +494,7 @@ export function LottieCreatorSurface({
                   onMoveTrack={(sourceTrackId, target) =>
                     controller.moveTrack(sourceTrackId, target)
                   }
+                  menu={layerMenu}
                 />
               )}
             </div>

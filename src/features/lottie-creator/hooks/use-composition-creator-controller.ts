@@ -31,6 +31,7 @@ import {
   useItemsStore,
   useKeyframesStore,
   useTimelineCommandStore,
+  useTimelineSettingsStore,
   addItemOnNewTrack,
   setTracks,
   updateItem,
@@ -38,6 +39,7 @@ import {
   addKeyframes,
   removeKeyframesForItem,
   removeKeyframesForProperty,
+  captureSnapshot,
   DEFAULT_TRACK_HEIGHT,
 } from '../deps/timeline'
 import type { SubComposition } from '../deps/timeline'
@@ -47,6 +49,7 @@ import {
   ungroupFolder as ungroupFolderTracks,
 } from '../utils/folder-tree'
 import { moveTrackInTree } from '../utils/reorder-tree'
+import { useCreatorClipboardStore, type ClipboardLayer } from '../stores/creator-clipboard'
 
 /** Only shape/text items are valid Lottie-creator layers. */
 function isCreatorItem(item: TimelineItem): item is CreatorItem {
@@ -109,6 +112,95 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
       usePlaybackStore
         .getState()
         .setCurrentFrame(Math.min(usePlaybackStore.getState().currentFrame, duration - 1))
+
+    // Snapshot the given layers (item + keyframes) for the clipboard / duplicate.
+    const snapshotLayers = (layerIds: string[]): ClipboardLayer[] => {
+      const state = useItemsStore.getState()
+      const keyframes = useKeyframesStore.getState().keyframesByItemId
+      return layerIds.flatMap((id) => {
+        const item = state.items.find((it) => it.id === id)
+        if (!item || !isCreatorItem(item)) return []
+        return [
+          {
+            item: structuredClone(item),
+            properties: structuredClone(keyframes[id]?.properties ?? []),
+          },
+        ]
+      })
+    }
+
+    // Re-instantiate clipboard layers as fresh top-of-stack layers (new ids +
+    // tracks + keyframes), offset slightly so a paste is visible. Bracketed into
+    // a single undo step via captureSnapshot + addUndoEntry, using the raw
+    // (non-undo) store setters in between.
+    const instantiateLayers = (clipLayers: ClipboardLayer[]) => {
+      if (clipLayers.length === 0) return
+      const state = useItemsStore.getState()
+      let order = state.tracks.length > 0 ? Math.min(...state.tracks.map((t) => t.order)) : 0
+
+      const newTracks: TimelineTrack[] = []
+      const newItems: TimelineItem[] = []
+      const keyframePayloads: Array<{
+        itemId: string
+        property: (typeof clipLayers)[number]['properties'][number]['property']
+        frame: number
+        value: number
+        easing: (typeof clipLayers)[number]['properties'][number]['keyframes'][number]['easing']
+        easingConfig?: (typeof clipLayers)[number]['properties'][number]['keyframes'][number]['easingConfig']
+      }> = []
+      const newIds: string[] = []
+
+      for (const clip of clipLayers) {
+        const trackId = crypto.randomUUID()
+        order -= 1
+        newTracks.push({
+          id: trackId,
+          name: clip.item.label,
+          kind: 'video',
+          height: DEFAULT_TRACK_HEIGHT,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order,
+          items: [],
+        })
+        const newItemId = crypto.randomUUID()
+        const base = structuredClone(clip.item)
+        const transform = base.transform ?? {}
+        newItems.push({
+          ...base,
+          id: newItemId,
+          trackId,
+          from: 0,
+          durationInFrames: comp.durationInFrames,
+          transform: { ...transform, x: (transform.x ?? 0) + 16, y: (transform.y ?? 0) + 16 },
+        } as TimelineItem)
+        newIds.push(newItemId)
+        for (const prop of clip.properties) {
+          for (const keyframe of prop.keyframes) {
+            keyframePayloads.push({
+              itemId: newItemId,
+              property: prop.property,
+              frame: keyframe.frame,
+              value: keyframe.value,
+              easing: keyframe.easing,
+              easingConfig: keyframe.easingConfig,
+            })
+          }
+        }
+      }
+
+      const before = captureSnapshot()
+      useItemsStore.getState().setTracks([...state.tracks, ...newTracks])
+      useItemsStore.getState()._addItems(newItems)
+      if (keyframePayloads.length > 0) useKeyframesStore.getState()._addKeyframes(keyframePayloads)
+      useTimelineCommandStore
+        .getState()
+        .addUndoEntry({ type: 'PASTE_LOTTIE_LAYERS', payload: {} }, before)
+      useTimelineSettingsStore.getState().markDirty()
+      useSelectionStore.getState().selectItems(newIds)
+    }
 
     return {
       width: comp.width,
@@ -235,6 +327,29 @@ export function useCompositionCreatorController(comp: SubComposition): CreatorCo
 
       moveTrack: (sourceTrackId, target) =>
         setTracks(moveTrackInTree(useItemsStore.getState().tracks, sourceTrackId, target)),
+
+      copyLayers: (layerIds) => {
+        const layers = snapshotLayers(layerIds)
+        if (layers.length > 0) useCreatorClipboardStore.getState().setLayers(layers)
+      },
+
+      pasteLayers: () => instantiateLayers(useCreatorClipboardStore.getState().layers),
+
+      duplicateLayers: (layerIds) => instantiateLayers(snapshotLayers(layerIds)),
+
+      removeLayers: (layerIds) => {
+        if (layerIds.length === 0) return
+        removeItems(layerIds)
+        useSelectionStore.getState().clearSelection()
+      },
+
+      ungroupSelection: () => {
+        const state = useItemsStore.getState()
+        const firstId = useSelectionStore.getState().selectedItemIds[0]
+        const trackId = state.items.find((it) => it.id === firstId)?.trackId
+        const folderId = state.tracks.find((t) => t.id === trackId)?.parentTrackId
+        if (folderId) setTracks(ungroupFolderTracks(state.tracks, folderId))
+      },
 
       selectLayer: (id, additive) => {
         const selection = useSelectionStore.getState()
