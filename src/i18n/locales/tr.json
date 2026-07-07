@@ -59,7 +59,12 @@
     "saveAria": "Projeyi kaydet",
     "export": "Dışa Aktar",
     "exportVideo": "Videoyu Dışa Aktar",
-    "downloadProjectZip": "Projeyi İndir (.zip)"
+    "downloadProjectZip": "Projeyi İndir (.zip)",
+    "exportLottie": "Lottie olarak dışa aktar (.json)",
+    "lottieExportSuccess": "{{count}} şekil Lottie olarak dışa aktarıldı",
+    "lottieExportEmpty": "Henüz dışa aktarılacak bir şey yok — Lottie dışa aktarma şu anda yalnızca şekilleri destekliyor",
+    "lottieExportWarnings": "{{count}} öge temsil edilemedi ve atlandı",
+    "lottieExportFailed": "Lottie dışa aktarma başarısız oldu"
   },
   "unsavedChanges": {
     "title": "Kaydedilmemiş Değişiklikler",

@@ -59,7 +59,12 @@
     "saveAria": "プロジェクトを保存",
     "export": "書き出し",
     "exportVideo": "動画を書き出し",
-    "downloadProjectZip": "プロジェクトをダウンロード (.zip)"
+    "downloadProjectZip": "プロジェクトをダウンロード (.zip)",
+    "exportLottie": "Lottieとして書き出し (.json)",
+    "lottieExportSuccess": "{{count}} 個の図形をLottieとして書き出しました",
+    "lottieExportEmpty": "書き出す対象がありません — Lottie書き出しは現在シェイプのみに対応しています",
+    "lottieExportWarnings": "{{count}} 個のアイテムを表現できなかったためスキップしました",
+    "lottieExportFailed": "Lottieの書き出しに失敗しました"
   },
   "unsavedChanges": {
     "title": "未保存の変更",

@@ -34,7 +34,11 @@ import {
   useTransitionBreakageNotifications,
 } from '@/features/editor/deps/timeline-hooks'
 import { initTransitionChainSubscription } from '@/features/editor/deps/timeline-subscriptions'
-import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { useTimelineStore, useCompositionsStore } from '@/features/editor/deps/timeline-store'
+import {
+  LottieCompositionWorkspace,
+  useCompositionNavigationStore,
+} from '@/features/editor/deps/lottie-composition'
 import { importBundleExportDialog } from '@/features/editor/deps/project-bundle'
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library'
 import { useSettingsStore } from '@/features/editor/deps/settings'
@@ -44,6 +48,7 @@ import { useEditorStore } from '@/shared/state/editor'
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime'
 import { useProjectStore } from '@/features/editor/deps/projects'
 import {
+  exportTimelineAsLottie,
   importExportDialog,
   importExportsDialog,
   RenderQueuePersistence,
@@ -594,6 +599,23 @@ export const LoadedEditor = memo(function LoadedEditor({
     setExportDialogOpen(true)
   }, [])
 
+  const handleExportLottie = useCallback(() => {
+    usePlaybackStore.getState().pause()
+    try {
+      const { shapeCount, warnings } = exportTimelineAsLottie(null)
+      if (shapeCount === 0) {
+        toast.info(t('toolbar.lottieExportEmpty'))
+        return
+      }
+      toast.success(t('toolbar.lottieExportSuccess', { count: shapeCount }))
+      if (warnings.length > 0) {
+        toast.warning(t('toolbar.lottieExportWarnings', { count: warnings.length }))
+      }
+    } catch {
+      toast.error(t('toolbar.lottieExportFailed'))
+    }
+  }, [t])
+
   const handleOpenRenderQueue = useCallback(() => {
     void importExportsDialog()
     setRenderQueueOpen(true)
@@ -652,9 +674,15 @@ export const LoadedEditor = memo(function LoadedEditor({
   const timelineDuration = 30
   const isColorWorkspace = workspace === 'color'
   const isAnimateWorkspace = workspace === 'animate'
-  // Both the Color and Animate workspaces replace the default split layout and
+  // When the active composition is a Lottie, the editor's main area becomes the
+  // Lottie authoring surface instead of the preview + timeline split.
+  const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId)
+  const isLottieComposition = useCompositionsStore((s) =>
+    activeCompositionId ? s.compositionById[activeCompositionId]?.kind === 'lottie' : false,
+  )
+  // Color, Animate, and Lottie workspaces replace the default split layout and
   // hide the inline media/properties sidebars.
-  const hidesDefaultSidebars = isColorWorkspace || isAnimateWorkspace
+  const hidesDefaultSidebars = isColorWorkspace || isAnimateWorkspace || isLottieComposition
 
   return (
     <div
@@ -672,6 +700,7 @@ export const LoadedEditor = memo(function LoadedEditor({
           onSave={handleSave}
           onExport={handleExport}
           onExportBundle={handleExportBundle}
+          onExportLottie={handleExportLottie}
           onOpenRenderQueue={handleOpenRenderQueue}
           renderQueueCount={renderQueueActiveCount}
         />
@@ -689,7 +718,11 @@ export const LoadedEditor = memo(function LoadedEditor({
         )}
 
         {/* Right side: Preview/Properties + Timeline */}
-        {isAnimateWorkspace ? (
+        {isLottieComposition ? (
+          <ErrorBoundary level="feature">
+            <LottieCompositionWorkspace />
+          </ErrorBoundary>
+        ) : isAnimateWorkspace ? (
           <AnimateLayout project={project} />
         ) : isColorWorkspace ? (
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

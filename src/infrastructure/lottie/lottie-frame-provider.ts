@@ -34,6 +34,27 @@ export function ensureLottieWasm(): void {
   wasmConfigured = true
 }
 
+const registeredFonts = new Map<string, Promise<boolean>>()
+
+/**
+ * Register a font (by name) with dotlottie/thorvg so Lottie text layers naming
+ * it render natively. `source` is a URL or the raw font bytes. Idempotent +
+ * cached per name; failures resolve to `false` rather than throwing so callers
+ * can render best-effort. thorvg needs TTF/OTF (not woff2).
+ */
+export function ensureLottieFont(
+  name: string,
+  source: string | ArrayBuffer | Uint8Array,
+): Promise<boolean> {
+  ensureLottieWasm()
+  let pending = registeredFonts.get(name)
+  if (!pending) {
+    pending = DotLottie.registerFont(name, source).catch(() => false)
+    registeredFonts.set(name, pending)
+  }
+  return pending
+}
+
 export interface LottieFrameMapInput {
   /** Frame within the clip (0-based), in project FPS. */
   localFrame: number

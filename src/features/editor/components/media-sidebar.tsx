@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/button'
+import { createLottieComposition } from '@/features/editor/deps/lottie-composition'
 import { cn } from '@/shared/ui/cn'
 import { useEditorStore } from '@/shared/state/editor'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
@@ -487,6 +488,12 @@ export const MediaSidebar = memo(function MediaSidebar() {
     selectItems([shapeItem.id])
   }, [])
 
+  // Create a new Lottie composition (a compound clip you enter to author) and
+  // drill into it.
+  const handleAddLottie = useCallback(() => {
+    createLottieComposition()
+  }, [])
+
   // Add adjustment layer to timeline at the best available position
   // Optionally with pre-applied effects and custom label
   const handleAddAdjustmentLayer = useCallback((effects?: VisualEffect[], label?: string) => {
@@ -826,6 +833,22 @@ export const MediaSidebar = memo(function MediaSidebar() {
                                 {renderTextTemplatePreview()}
                                 <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
                                   {ADD_TEXT_TEMPLATE_LABEL}
+                                </span>
+                              </button>
+                            ) : null}
+                            {showAddText ? (
+                              <button
+                                onClick={() => {
+                                  if (shouldSuppressGeneratedItemClick()) return
+                                  handleAddLottie()
+                                }}
+                                className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
+                              >
+                                <div className="flex aspect-video w-full items-center justify-center rounded bg-primary/10 text-[10px] font-semibold text-primary">
+                                  ✦
+                                </div>
+                                <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
+                                  Lottie
                                 </span>
                               </button>
                             ) : null}

@@ -98,6 +98,8 @@ interface KeyframeGraphPanelProps {
    * The user still chooses sheet / graph / split; split is no longer forced.
    */
   splitView?: boolean
+  /** Override canvas dims/fps (e.g. a sub-composition's) instead of reading the project. */
+  canvasOverride?: CanvasSettings
 }
 
 type KeyframeEditorMode = 'graph' | 'dopesheet' | 'split'
@@ -268,6 +270,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   placement = 'bottom',
   showCloseButton = true,
   splitView = false,
+  canvasOverride,
 }: KeyframeGraphPanelProps) {
   const { t } = useTranslation()
   const easingOptions = useMemo(
@@ -494,12 +497,13 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   )
 
   const canvas = useMemo<CanvasSettings>(
-    () => ({
-      width: currentProject?.metadata.width ?? DEFAULT_PROJECT_WIDTH,
-      height: currentProject?.metadata.height ?? DEFAULT_PROJECT_HEIGHT,
-      fps: currentProject?.metadata.fps ?? DEFAULT_PROJECT_FPS,
-    }),
-    [currentProject],
+    () =>
+      canvasOverride ?? {
+        width: currentProject?.metadata.width ?? DEFAULT_PROJECT_WIDTH,
+        height: currentProject?.metadata.height ?? DEFAULT_PROJECT_HEIGHT,
+        fps: currentProject?.metadata.fps ?? DEFAULT_PROJECT_FPS,
+      },
+    [currentProject, canvasOverride],
   )
 
   const availableProperties = useMemo(

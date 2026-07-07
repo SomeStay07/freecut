@@ -235,6 +235,13 @@ export interface ProjectTimeline {
     markers?: ProjectTimeline['markers']
     inPoint?: number
     outPoint?: number
+    /**
+     * Composition kind. Absent/`'timeline'` = a normal nested video timeline;
+     * `'lottie'` = the content is authored via the Lottie creator (its items are
+     * the shape/text layers). The parent renders it as a `type:'lottie'` wrapper
+     * clip whose `src` is rebuilt from these items on load.
+     */
+    kind?: 'timeline' | 'lottie'
   }>
   // Keyframe animations
   keyframes?: Array<{

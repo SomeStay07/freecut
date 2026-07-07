@@ -59,7 +59,12 @@
     "saveAria": "Guardar proyecto",
     "export": "Exportar",
     "exportVideo": "Exportar vídeo",
-    "downloadProjectZip": "Descargar proyecto (.zip)"
+    "downloadProjectZip": "Descargar proyecto (.zip)",
+    "exportLottie": "Exportar como Lottie (.json)",
+    "lottieExportSuccess": "Se exportaron {{count}} forma(s) como Lottie",
+    "lottieExportEmpty": "Aún no hay nada que exportar — la exportación a Lottie solo admite formas por ahora",
+    "lottieExportWarnings": "{{count}} elemento(s) no se pudieron representar y se omitieron",
+    "lottieExportFailed": "Error al exportar a Lottie"
   },
   "unsavedChanges": {
     "title": "Cambios sin guardar",

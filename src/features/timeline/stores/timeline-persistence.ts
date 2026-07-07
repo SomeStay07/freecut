@@ -28,6 +28,8 @@ import { useCompositionsStore } from './compositions-store'
 import { useCompositionNavigationStore } from './composition-navigation-store'
 import { useSequencesStore } from './sequences-store'
 import { getProject, updateProject, saveProjectThumbnail } from '@/infrastructure/storage'
+import { buildLottieDocument } from '@/infrastructure/lottie/export'
+import { CREATOR_FONT, ensureCreatorFont } from '@/infrastructure/lottie/creator-font'
 import {
   importCanvasRenderOrchestrator,
   convertTimelineToComposition,
@@ -52,6 +54,75 @@ import { getEffectiveTimelineMaxFrame, sanitizeInOutPoints } from '../utils/in-o
 import { reverseConformService } from '../services/reverse-conform-service'
 
 const logger = createLogger('TimelineStore')
+
+/** Minimal shape of a persisted `kind:'lottie'` composition needed to rebake it. */
+type LottieSourceComposition = {
+  id: string
+  name: string
+  items: TimelineItem[]
+  keyframes?: ItemKeyframes[]
+  fps: number
+  width: number
+  height: number
+  durationInFrames: number
+}
+
+/**
+ * A creator-Lottie wrapper's `src` is a blob URL that dies on reload. Rebuild it
+ * from the authoring composition (the single source of truth) so the wrapper
+ * plays after a project reopen. No-op for wrappers whose composition isn't a
+ * `kind:'lottie'` one (regular imported Lotties keep their own src).
+ */
+export function rebuildCreatorLottieWrapperSrcs(
+  items: TimelineItem[],
+  lottieCompsById: Map<string, LottieSourceComposition>,
+): TimelineItem[] {
+  if (lottieCompsById.size === 0) return items
+  let rebuilt = false
+  const next = items.map((item) => {
+    if (item.type !== 'lottie' || !item.compositionId) return item
+    const comp = lottieCompsById.get(item.compositionId)
+    if (!comp) return item
+    const keyframes: Record<string, ItemKeyframes> = {}
+    for (const k of comp.keyframes ?? []) keyframes[k.itemId] = k
+    const { document } = buildLottieDocument(comp.items, {
+      fps: comp.fps,
+      width: comp.width,
+      height: comp.height,
+      durationInFrames: comp.durationInFrames,
+      name: comp.name,
+      fontName: CREATOR_FONT,
+      keyframes,
+    })
+    const src = URL.createObjectURL(
+      new Blob([JSON.stringify(document)], { type: 'application/json' }),
+    )
+    rebuilt = true
+    return { ...item, src, totalFrames: comp.durationInFrames, frameRate: comp.fps }
+  })
+  return rebuilt ? next : items
+}
+
+/** Index the project's `kind:'lottie'` compositions by id for wrapper rebaking. */
+export function buildLottieCompositionIndex(
+  compositions: NonNullable<ProjectTimeline['compositions']>,
+): Map<string, LottieSourceComposition> {
+  const map = new Map<string, LottieSourceComposition>()
+  for (const c of compositions) {
+    if (c.kind !== 'lottie') continue
+    map.set(c.id, {
+      id: c.id,
+      name: c.name,
+      items: c.items as TimelineItem[],
+      keyframes: (c.keyframes ?? []) as ItemKeyframes[],
+      fps: c.fps,
+      width: c.width,
+      height: c.height,
+      durationInFrames: c.durationInFrames,
+    })
+  }
+  return map
+}
 
 /**
  * Progressive downscale a canvas to a JPEG blob.
@@ -752,6 +823,7 @@ export function buildTimelineFromStores(): ProjectTimeline {
           ...(c.markers?.length && { markers: c.markers as ProjectTimeline['markers'] }),
           ...(c.inPoint != null && { inPoint: c.inPoint }),
           ...(c.outPoint != null && { outPoint: c.outPoint }),
+          ...(c.kind && { kind: c.kind }),
         })),
       }
     })(),
@@ -992,8 +1064,16 @@ export async function hydrateTimelineStoresFromProject(project: Project): Promis
       outPoint: t.outPoint ?? null,
       maxFrame: getEffectiveTimelineMaxFrame((t.items || []) as TimelineItem[], projectFps),
     })
-    const hydratedItems = await reverseConformService.hydrateItems(
-      (t.items || []) as TimelineItem[],
+    // Index the persisted creator-Lottie compositions so wrapper blob srcs
+    // (dead after reload) can be rebaked from their authoring source.
+    const lottieCompsById = buildLottieCompositionIndex(t.compositions ?? [])
+    // Re-register the creator font globally so reloaded wrappers with text
+    // layers render (dotlottie registration is process-global + idempotent).
+    if (lottieCompsById.size > 0) void ensureCreatorFont()
+
+    const hydratedItems = rebuildCreatorLottieWrapperSrcs(
+      await reverseConformService.hydrateItems((t.items || []) as TimelineItem[]),
+      lottieCompsById,
     )
     useItemsStore.getState().setTracks(sortedTracks as TimelineTrack[])
     useItemsStore.getState().setItems(hydratedItems)
@@ -1012,7 +1092,10 @@ export async function hydrateTimelineStoresFromProject(project: Project): Promis
         t.compositions.map(async (c) => ({
           id: c.id,
           name: c.name,
-          items: await reverseConformService.hydrateItems(c.items as TimelineItem[]),
+          items: rebuildCreatorLottieWrapperSrcs(
+            await reverseConformService.hydrateItems(c.items as TimelineItem[]),
+            lottieCompsById,
+          ),
           tracks: c.tracks as TimelineTrack[],
           transitions: (c.transitions ?? []) as Transition[],
           keyframes: (c.keyframes ?? []) as ItemKeyframes[],
@@ -1025,6 +1108,7 @@ export async function hydrateTimelineStoresFromProject(project: Project): Promis
           markers: c.markers ?? [],
           inPoint: c.inPoint ?? null,
           outPoint: c.outPoint ?? null,
+          ...(c.kind && { kind: c.kind }),
         })),
       )
       useCompositionsStore.getState().setCompositions(hydratedCompositions)

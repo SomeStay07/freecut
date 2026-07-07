@@ -7,6 +7,7 @@ import {
   Bug,
   ChevronDown,
   Download,
+  FileJson,
   FolderArchive,
   Github,
   Keyboard,
@@ -65,6 +66,7 @@ interface ToolbarProps {
   onSave?: () => Promise<void>
   onExport?: () => void
   onExportBundle?: () => void
+  onExportLottie?: () => void
   onOpenRenderQueue?: () => void
   /** Number of queued + rendering jobs, shown as a badge on the queue button. */
   renderQueueCount?: number
@@ -77,6 +79,7 @@ export const Toolbar = memo(function Toolbar({
   onSave,
   onExport,
   onExportBundle,
+  onExportLottie,
   onOpenRenderQueue,
   renderQueueCount = 0,
 }: ToolbarProps) {
@@ -361,6 +364,12 @@ export const Toolbar = memo(function Toolbar({
               <FolderArchive className="h-4 w-4" />
               {t('toolbar.downloadProjectZip')}
             </DropdownMenuItem>
+            {onExportLottie && (
+              <DropdownMenuItem onClick={onExportLottie} className="gap-2">
+                <FileJson className="h-4 w-4" />
+                {t('toolbar.exportLottie')}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

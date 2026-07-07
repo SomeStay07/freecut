@@ -303,16 +303,21 @@ function ProjectsIndex() {
               <Separator orientation="vertical" className="h-6" />
 
               <WorkspaceIndicator />
-              <Button variant="outline" size="lg" className="gap-2 px-4" onClick={handleImportClick}>
+              <Button
+                variant="outline"
+                size="lg"
+                className="gap-2 px-4"
+                onClick={handleImportClick}
+              >
                 <Upload className="w-4 h-4" />
                 {t('projects.importProject')}
               </Button>
-              <Link to="/projects/new">
-                <Button size="lg" className="gap-2 px-4">
+              <Button size="lg" className="gap-2 px-4" asChild>
+                <Link to="/projects/new">
                   <Plus className="w-4 h-4" />
                   {t('projects.newProject')}
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
 
             {/* Hidden file input for import */}

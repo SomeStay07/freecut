@@ -28,6 +28,13 @@ export interface SubComposition {
   /** Per-sequence in/out playback range. */
   inPoint?: number | null
   outPoint?: number | null
+  /**
+   * Composition kind. `'timeline'` (default/undefined) = a normal nested video
+   * timeline. `'lottie'` = the content is authored via the Lottie creator; its
+   * `items` are the shape/text layers and `keyframes` their animation. The
+   * parent timeline renders it as a `type:'lottie'` wrapper clip.
+   */
+  kind?: 'timeline' | 'lottie'
 }
 
 function buildCompositionsMediaDependencyIds(compositions: SubComposition[]): string[] {

@@ -59,7 +59,12 @@
     "saveAria": "Enregistrer le projet",
     "export": "Exporter",
     "exportVideo": "Exporter la vidéo",
-    "downloadProjectZip": "Télécharger le projet (.zip)"
+    "downloadProjectZip": "Télécharger le projet (.zip)",
+    "exportLottie": "Exporter en Lottie (.json)",
+    "lottieExportSuccess": "{{count}} forme(s) exportée(s) en Lottie",
+    "lottieExportEmpty": "Rien à exporter pour l'instant — l'export Lottie ne prend en charge que les formes",
+    "lottieExportWarnings": "{{count}} élément(s) n'ont pas pu être représentés et ont été ignorés",
+    "lottieExportFailed": "Échec de l'export Lottie"
   },
   "unsavedChanges": {
     "title": "Modifications non enregistrées",

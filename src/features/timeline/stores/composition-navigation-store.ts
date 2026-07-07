@@ -212,7 +212,7 @@ function findCompositionEntryItem(
       (item) =>
         item.id === entryItemId &&
         item.compositionId === compositionId &&
-        (item.type === 'composition' || item.type === 'audio'),
+        (item.type === 'composition' || item.type === 'audio' || item.type === 'lottie'),
     )
     if (exactMatch) {
       return exactMatch
@@ -220,7 +220,9 @@ function findCompositionEntryItem(
   }
 
   const visualMatch = items.find(
-    (item) => item.type === 'composition' && item.compositionId === compositionId,
+    (item) =>
+      (item.type === 'composition' || item.type === 'lottie') &&
+      item.compositionId === compositionId,
   )
   if (visualMatch) {
     return visualMatch

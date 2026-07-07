@@ -59,7 +59,12 @@
     "saveAria": "Save project",
     "export": "Export",
     "exportVideo": "Export Video",
-    "downloadProjectZip": "Download Project (.zip)"
+    "downloadProjectZip": "Download Project (.zip)",
+    "exportLottie": "Export as Lottie (.json)",
+    "lottieExportSuccess": "Exported {{count}} shape(s) as Lottie",
+    "lottieExportEmpty": "Nothing to export yet — Lottie export currently supports shapes only",
+    "lottieExportWarnings": "{{count}} item(s) couldn't be represented and were skipped",
+    "lottieExportFailed": "Lottie export failed"
   },
   "unsavedChanges": {
     "title": "Unsaved Changes",

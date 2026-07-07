@@ -2,7 +2,15 @@
  * Composition Actions — create, dissolve, and manage pre-compositions.
  */
 
-import type { AudioItem, TimelineItem, TimelineTrack, CompositionItem } from '@/types/timeline'
+import type {
+  AudioItem,
+  TimelineItem,
+  TimelineTrack,
+  CompositionItem,
+  LottieItem,
+} from '@/types/timeline'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { buildLottieDocument } from '@/infrastructure/lottie/export'
 import {
   createClassicTrack,
   findNearestTrackByKind,
@@ -1099,6 +1107,105 @@ export function createSequence(name?: string): string {
   )
   useTimelineSettingsStore.getState().markDirty()
   useCompositionNavigationStore.getState().switchToSequence(id)
+  return id
+}
+
+/**
+ * Create a new Lottie composition: a `kind:'lottie'` sub-composition (whose
+ * items are the authored shape/text layers) plus a `type:'lottie'` wrapper clip
+ * on the current timeline that references it, then drill in to author it. The
+ * wrapper starts as an empty (blank) Lottie; it's regenerated from the authored
+ * layers on exit.
+ */
+export function createLottieComposition(name?: string): string {
+  const id = crypto.randomUUID()
+  const metadata = useProjectStore.getState().currentProject?.metadata
+  const width = metadata?.width ?? DEFAULT_PROJECT_WIDTH
+  const height = metadata?.height ?? DEFAULT_PROJECT_HEIGHT
+  const fps = useTimelineSettingsStore.getState().fps
+  const durationInFrames = Math.max(1, Math.round(fps * 3))
+  const compName = name?.trim() || 'Lottie'
+
+  // Blank Lottie for the wrapper's initial src (regenerated from layers on exit).
+  const { document } = buildLottieDocument([], {
+    fps,
+    width,
+    height,
+    durationInFrames,
+    name: compName,
+  })
+  const src = URL.createObjectURL(
+    new Blob([JSON.stringify(document)], { type: 'application/json' }),
+  )
+
+  const composition: SubComposition = {
+    id,
+    name: compName,
+    kind: 'lottie',
+    items: [],
+    tracks: [
+      {
+        id: `track-${crypto.randomUUID()}`,
+        name: 'Layers',
+        height: DEFAULT_TRACK_HEIGHT,
+        locked: false,
+        syncLock: true,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ],
+    transitions: [],
+    keyframes: [],
+    fps,
+    width,
+    height,
+    durationInFrames,
+  }
+
+  const from = usePlaybackStore.getState().currentFrame
+
+  execute(
+    'CREATE_LOTTIE_COMPOSITION',
+    () => {
+      useCompositionsStore.getState().addComposition(composition)
+
+      // Place the wrapper on the topmost video track (create one if none).
+      const tracks = useItemsStore.getState().tracks
+      let target = tracks
+        .filter((t) => !t.isGroup && getTrackKind(t) === 'video')
+        .sort((a, b) => a.order - b.order)[0]
+      if (!target) {
+        target = createClassicTrack({ tracks, kind: 'video', order: 0 })
+        useItemsStore.getState().setTracks([...tracks, target])
+      }
+
+      const wrapper: LottieItem = {
+        id: crypto.randomUUID(),
+        type: 'lottie',
+        trackId: target.id,
+        from,
+        durationInFrames,
+        label: compName,
+        compositionId: id,
+        src,
+        frameRate: fps,
+        totalFrames: durationInFrames,
+        sourceWidth: width,
+        sourceHeight: height,
+        loop: true,
+        transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
+      }
+      useItemsStore.getState()._addItem(wrapper)
+      useSelectionStore.getState().selectItems([wrapper.id])
+    },
+    { compositionId: id },
+  )
+
+  useTimelineSettingsStore.getState().markDirty()
+  openComposition(id, compName)
   return id
 }
 

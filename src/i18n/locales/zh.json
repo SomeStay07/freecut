@@ -59,7 +59,12 @@
     "saveAria": "保存项目",
     "export": "导出",
     "exportVideo": "导出视频",
-    "downloadProjectZip": "下载项目 (.zip)"
+    "downloadProjectZip": "下载项目 (.zip)",
+    "exportLottie": "导出为 Lottie (.json)",
+    "lottieExportSuccess": "已将 {{count}} 个形状导出为 Lottie",
+    "lottieExportEmpty": "暂无可导出的内容 — Lottie 导出目前仅支持形状",
+    "lottieExportWarnings": "{{count}} 个项目无法表示，已跳过",
+    "lottieExportFailed": "Lottie 导出失败"
   },
   "unsavedChanges": {
     "title": "未保存的更改",

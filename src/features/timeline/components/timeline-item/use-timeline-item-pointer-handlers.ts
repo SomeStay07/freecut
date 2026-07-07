@@ -207,7 +207,9 @@ export function useTimelineItemPointerHandlers({
       // Compound clip wrappers: open the sub-composition. A sequence tab
       // switches to its tab (its own root); a plain compound clip drills in.
       if (
-        (item.type === 'composition' || (item.type === 'audio' && item.compositionId)) &&
+        (item.type === 'composition' ||
+          item.type === 'lottie' ||
+          (item.type === 'audio' && item.compositionId)) &&
         item.compositionId
       ) {
         openComposition(item.compositionId, item.label, item.id)

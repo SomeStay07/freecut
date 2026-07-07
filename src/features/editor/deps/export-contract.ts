@@ -12,3 +12,10 @@ export const importExportsDialog = () => import('@/features/export/components/ex
 export { RenderQueueRunner } from '@/features/export/components/render-queue-runner'
 export { RenderQueuePersistence } from '@/features/export/components/render-queue-persistence'
 export { useRenderQueueStore } from '@/features/export/stores/render-queue-store'
+
+// Lottie export is a pure, light synchronous helper (no heavy render engine) —
+// safe to import eagerly.
+export {
+  exportTimelineAsLottie,
+  type LottieExportOutcome,
+} from '@/features/export/services/lottie-export-service'
