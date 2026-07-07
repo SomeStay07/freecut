@@ -9,19 +9,24 @@
  * preview and a single undo commit. Increment 3b adds per-segment easing via
  * `SegmentEasingPopover` (preset click = one undo step; bezier-handle drag is
  * bracketed into a single undo step by a start-snapshot/end-commit pair,
- * mirroring the single-item dopesheet's `keyframe-graph-panel.tsx`).
- * Shift-range select, alt-duplicate, marquee box-select and add/remove
- * keyframes are deferred.
+ * mirroring the single-item dopesheet's `keyframe-graph-panel.tsx`). Increment
+ * 3c adds a per-property diamond toggle (add/remove a keyframe at the playhead)
+ * plus a per-layer "+" picker that starts animating any still property by
+ * seeding its first keyframe with the interpolated value at the playhead.
+ * Shift-range select, alt-duplicate and marquee box-select are deferred.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Diamond, Plus } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
 import type { ShapeItem, TextItem, TimelineItem } from '@/types/timeline'
+import type { CanvasSettings } from '@/types/transform'
 import type { AnimatableProperty, ItemKeyframes, Keyframe, KeyframeRef } from '@/types/keyframe'
 import { PROPERTY_LABELS } from '@/types/keyframe'
 import { getLayerColor } from '../utils/layer-color'
+import { getLayerPropertyBaseValue } from '../utils/keyframe-values'
 import { useLayerBarDrag } from '../hooks/use-layer-bar-drag'
 import {
   useItemsStore,
@@ -29,11 +34,14 @@ import {
   useKeyframeSelectionStore,
   useTimelineCommandStore,
   useTimelineSettingsStore,
+  addKeyframe,
+  removeKeyframes,
   updateKeyframes,
   captureSnapshot,
   type SubComposition,
   type TimelineSnapshot,
 } from '../deps/timeline'
+import { getAnimatablePropertiesForItem, interpolatePropertyValue } from '../deps/keyframes'
 import {
   DopesheetPlayheadLine,
   DopesheetRulerHeader,
@@ -79,6 +87,8 @@ interface KeyframeRowProps {
   frameToX: (frame: number) => number
   getRenderedKeyframeX: (frame: number) => number | null
   accentColor: string
+  playheadFrame: number
+  onToggleKeyframe: (itemId: string, property: AnimatableProperty) => void
   selectedKeyframes: KeyframeRef[]
   onKeyframePointerDown: (
     itemId: string,
@@ -100,6 +110,8 @@ function KeyframeRow({
   frameToX,
   getRenderedKeyframeX,
   accentColor,
+  playheadFrame,
+  onToggleKeyframe,
   selectedKeyframes,
   onKeyframePointerDown,
   previewByItemId,
@@ -107,6 +119,10 @@ function KeyframeRow({
   onSegmentDragStart,
   onSegmentDragEnd,
 }: KeyframeRowProps) {
+  const hasKeyframeAtPlayhead = useMemo(
+    () => keyframes.some((keyframe) => keyframe.frame === playheadFrame),
+    [keyframes, playheadFrame],
+  )
   const keyframeMetaByIdRef = useRef(new Map<string, KeyframeMeta>())
   const renderedKeyframeXById = useMemo(() => {
     const map = new Map<string, number>()
@@ -141,8 +157,21 @@ function KeyframeRow({
       className="grid border-b border-border/40"
       style={{ gridTemplateColumns: `${OUTLINER_WIDTH}px 1fr`, height: KEYFRAME_ROW_HEIGHT }}
     >
-      <div className="flex items-center truncate pl-7 text-[11px] text-muted-foreground">
-        {PROPERTY_LABELS[property]}
+      <div className="flex items-center gap-1 truncate pl-4 text-[11px] text-muted-foreground">
+        <button
+          type="button"
+          onClick={() => onToggleKeyframe(itemId, property)}
+          className={cn(
+            'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm hover:bg-accent',
+            hasKeyframeAtPlayhead ? 'text-amber-500' : 'text-muted-foreground/60',
+          )}
+          aria-label={
+            hasKeyframeAtPlayhead ? 'Remove keyframe at playhead' : 'Add keyframe at playhead'
+          }
+        >
+          <Diamond className={cn('h-2.5 w-2.5', hasKeyframeAtPlayhead && 'fill-current')} />
+        </button>
+        <span className="truncate">{PROPERTY_LABELS[property]}</span>
       </div>
       {/* PropertyTimelineCell's root is a height-less `relative` div that positions
           its diamonds at top:50% — render it as the DIRECT grid cell so grid
@@ -188,6 +217,8 @@ interface LayerRowProps {
   isSelected: boolean
   isCollapsed: boolean
   onToggleCollapse: (itemId: string) => void
+  playheadFrame: number
+  onToggleKeyframe: (itemId: string, property: AnimatableProperty) => void
   selectedKeyframes: KeyframeRef[]
   onKeyframePointerDown: (
     itemId: string,
@@ -214,6 +245,8 @@ function LayerRow({
   isSelected,
   isCollapsed,
   onToggleCollapse,
+  playheadFrame,
+  onToggleKeyframe,
   selectedKeyframes,
   onKeyframePointerDown,
   previewByItemId,
@@ -246,6 +279,14 @@ function LayerRow({
     [itemKeyframes],
   )
 
+  // Every property this layer can animate (for the "+" picker) and the subset
+  // that already has keyframes (shown as a filled diamond in the picker).
+  const animatableProperties = useMemo(() => getAnimatablePropertiesForItem(item), [item])
+  const animatedPropertySet = useMemo(
+    () => new Set(animatedProperties.map((p) => p.property)),
+    [animatedProperties],
+  )
+
   return (
     <div>
       <div
@@ -272,6 +313,45 @@ function LayerRow({
             style={{ backgroundColor: color }}
           />
           <span className="truncate">{item.label}</span>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Animate a property"
+                title="Animate a property"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" side="right" className="w-48 p-1">
+              <div className="px-2 py-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                Animate
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {animatableProperties.map((property) => {
+                  const isAnimated = animatedPropertySet.has(property)
+                  return (
+                    <button
+                      key={property}
+                      type="button"
+                      onClick={() => onToggleKeyframe(item.id, property)}
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-xs hover:bg-accent"
+                    >
+                      <Diamond
+                        className={cn(
+                          'h-2.5 w-2.5 shrink-0',
+                          isAnimated ? 'fill-current text-amber-500' : 'text-muted-foreground/50',
+                        )}
+                      />
+                      <span className="truncate">{PROPERTY_LABELS[property]}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="relative border-l border-border/60">
@@ -312,6 +392,8 @@ function LayerRow({
             frameToX={frameToX}
             getRenderedKeyframeX={getRenderedKeyframeX}
             accentColor={color}
+            playheadFrame={playheadFrame}
+            onToggleKeyframe={onToggleKeyframe}
             selectedKeyframes={selectedKeyframes}
             onKeyframePointerDown={onKeyframePointerDown}
             previewByItemId={previewByItemId}
@@ -350,6 +432,47 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
       return next
     })
   }, [])
+
+  const canvas = useMemo<CanvasSettings>(
+    () => ({ width: comp.width, height: comp.height, fps: comp.fps }),
+    [comp.width, comp.height, comp.fps],
+  )
+
+  // Add or remove a keyframe for `property` at the playhead (also the entry point
+  // for starting to animate a still property from the layer's "+" picker). Reads
+  // live store state so it stays correct regardless of render timing: if a
+  // keyframe already sits on the current frame it's removed, otherwise a new one
+  // is created carrying the property's interpolated value at that frame (so
+  // adding a keyframe never visually jumps the layer). Lottie layers are
+  // full-duration (`from: 0`), so the comp playhead frame is the item-local frame
+  // and there are no transition regions to block placement.
+  const toggleKeyframeAtPlayhead = useCallback(
+    (itemId: string, property: AnimatableProperty) => {
+      const item = useItemsStore.getState().items.find((it) => it.id === itemId)
+      if (!item) return
+
+      const frame = clampFrame(usePlaybackStore.getState().currentFrame, comp.durationInFrames)
+      const propKeyframes =
+        useKeyframesStore
+          .getState()
+          .keyframesByItemId[itemId]?.properties.find((p) => p.property === property)?.keyframes ??
+        []
+
+      const existing = propKeyframes.find((keyframe) => keyframe.frame === frame)
+      if (existing) {
+        removeKeyframes([{ itemId, property, keyframeId: existing.id }])
+        return
+      }
+
+      const value = interpolatePropertyValue(
+        propKeyframes,
+        frame,
+        getLayerPropertyBaseValue(item, property, canvas),
+      )
+      addKeyframe(itemId, property, frame, value)
+    },
+    [comp.durationInFrames, canvas],
+  )
 
   const timelineRef = useRef<HTMLDivElement>(null)
   const [timelineWidth, setTimelineWidth] = useState(0)
@@ -698,6 +821,8 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
               isSelected={item.id === selectedItemId}
               isCollapsed={collapsedByItemId.get(item.id) ?? false}
               onToggleCollapse={toggleCollapse}
+              playheadFrame={currentFrame}
+              onToggleKeyframe={toggleKeyframeAtPlayhead}
               selectedKeyframes={selectedKeyframes}
               onKeyframePointerDown={handleKeyframePointerDown}
               previewByItemId={previewByItemId}
