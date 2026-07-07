@@ -6,8 +6,12 @@
  * one keyframe sub-row per animated property (via the shared
  * `PropertyTimelineCell`). Increment 3 adds keyframe click-select
  * (ctrl/cmd-click to toggle multi-select) and drag-to-retime with a live
- * preview and a single undo commit. Shift-range select, alt-duplicate,
- * marquee box-select, segment easing and add/remove keyframes are deferred.
+ * preview and a single undo commit. Increment 3b adds per-segment easing via
+ * `SegmentEasingPopover` (preset click = one undo step; bezier-handle drag is
+ * bracketed into a single undo step by a start-snapshot/end-commit pair,
+ * mirroring the single-item dopesheet's `keyframe-graph-panel.tsx`).
+ * Shift-range select, alt-duplicate, marquee box-select and add/remove
+ * keyframes are deferred.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -23,8 +27,12 @@ import {
   useItemsStore,
   useKeyframesStore,
   useKeyframeSelectionStore,
+  useTimelineCommandStore,
+  useTimelineSettingsStore,
   updateKeyframes,
+  captureSnapshot,
   type SubComposition,
+  type TimelineSnapshot,
 } from '../deps/timeline'
 import {
   DopesheetPlayheadLine,
@@ -36,6 +44,7 @@ import {
   useDopesheetViewport,
   type BlockedFrameRange,
   type KeyframeMeta,
+  type SegmentEasingChange,
   type Viewport,
 } from '../deps/dopesheet'
 
@@ -46,9 +55,9 @@ const BAR_HEIGHT = 26
 const TICK_COUNT = 9
 
 // Sub-rows never have transition-blocked ranges (no transitions in the Lottie
-// composition timeline) or segment-easing/duplicate-drag preview state — reuse
-// stable empty constants so PropertyTimelineCell (React.memo) doesn't see a
-// new reference on every render.
+// composition timeline) or duplicate-drag preview state — reuse stable empty
+// constants so PropertyTimelineCell (React.memo) doesn't see a new reference
+// on every render.
 const EMPTY_BLOCKED_RANGES: BlockedFrameRange[] = []
 const noop = () => {}
 
@@ -78,6 +87,9 @@ interface KeyframeRowProps {
     event: PointerEvent<HTMLButtonElement>,
   ) => void
   previewByItemId: Map<string, Record<string, number>> | null
+  onSegmentEasingChange: SegmentEasingChange
+  onSegmentDragStart: () => void
+  onSegmentDragEnd: () => void
 }
 
 function KeyframeRow({
@@ -91,6 +103,9 @@ function KeyframeRow({
   selectedKeyframes,
   onKeyframePointerDown,
   previewByItemId,
+  onSegmentEasingChange,
+  onSegmentDragStart,
+  onSegmentDragEnd,
 }: KeyframeRowProps) {
   const keyframeMetaByIdRef = useRef(new Map<string, KeyframeMeta>())
   const renderedKeyframeXById = useMemo(() => {
@@ -152,6 +167,9 @@ function KeyframeRow({
         sheetPreviewFrames={sheetPreviewFrames}
         sheetPreviewDuplicateKeyframeIds={null}
         accentColor={accentColor}
+        onSegmentEasingChange={onSegmentEasingChange}
+        onSegmentDragStart={onSegmentDragStart}
+        onSegmentDragEnd={onSegmentDragEnd}
       />
     </div>
   )
@@ -178,6 +196,9 @@ interface LayerRowProps {
     event: PointerEvent<HTMLButtonElement>,
   ) => void
   previewByItemId: Map<string, Record<string, number>> | null
+  onSegmentEasingChange: SegmentEasingChange
+  onSegmentDragStart: () => void
+  onSegmentDragEnd: () => void
 }
 
 function LayerRow({
@@ -196,6 +217,9 @@ function LayerRow({
   selectedKeyframes,
   onKeyframePointerDown,
   previewByItemId,
+  onSegmentEasingChange,
+  onSegmentDragStart,
+  onSegmentDragEnd,
 }: LayerRowProps) {
   const color = getLayerColor(item, index)
   const {
@@ -291,6 +315,9 @@ function LayerRow({
             selectedKeyframes={selectedKeyframes}
             onKeyframePointerDown={onKeyframePointerDown}
             previewByItemId={previewByItemId}
+            onSegmentEasingChange={onSegmentEasingChange}
+            onSegmentDragStart={onSegmentDragStart}
+            onSegmentDragEnd={onSegmentDragEnd}
           />
         ))}
     </div>
@@ -304,6 +331,8 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
   const selectedItemId = useSelectionStore((s) => s.selectedItemIds[0] ?? null)
   const keyframesByItemId = useKeyframesStore((s) => s.keyframesByItemId)
   const selectedKeyframes = useKeyframeSelectionStore((s) => s.selectedKeyframes)
+  // Use `_updateKeyframe` directly (no undo per call) for live segment-easing drags.
+  const _updateKeyframe = useKeyframesStore((s) => s._updateKeyframe)
 
   const layers = useMemo(() => {
     const orderByTrackId = new Map(tracks.map((t) => [t.id, t.order]))
@@ -547,6 +576,54 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
     }
   }, [])
 
+  // Segment easing: a bezier-handle drag is bracketed into a single undo step by
+  // a pre-drag snapshot + a commit on drag end (mirrors `keyframe-graph-panel.tsx`'s
+  // `handleDragStart`/`handleDragEnd`); a plain preset click commits its own step
+  // via `handleSegmentEasingChange` below.
+  const segmentDragSnapshotRef = useRef<TimelineSnapshot | null>(null)
+
+  const handleSegmentDragStart = useCallback(() => {
+    segmentDragSnapshotRef.current = captureSnapshot()
+  }, [])
+
+  const handleSegmentDragEnd = useCallback(() => {
+    const beforeSnapshot = segmentDragSnapshotRef.current
+    if (beforeSnapshot) {
+      useTimelineCommandStore
+        .getState()
+        .addUndoEntry({ type: 'MOVE_LOTTIE_KEYFRAME_GRAPH', payload: {} }, beforeSnapshot)
+      useTimelineSettingsStore.getState().markDirty()
+      segmentDragSnapshotRef.current = null
+    }
+  }, [])
+
+  // Apply an easing change from the dopesheet's per-segment popover to explicit
+  // keyframe refs. Live drag frames (`commit: false`) go through the no-undo
+  // path and are bracketed by handleSegmentDragStart/handleSegmentDragEnd;
+  // everything else commits its own undo entry.
+  const handleSegmentEasingChange = useCallback<SegmentEasingChange>(
+    (refs, updates, options) => {
+      if (refs.length === 0) return
+
+      if (options?.commit === false) {
+        for (const ref of refs) {
+          _updateKeyframe(ref.itemId, ref.property, ref.keyframeId, updates)
+        }
+        return
+      }
+
+      updateKeyframes(
+        refs.map((ref) => ({
+          itemId: ref.itemId,
+          property: ref.property,
+          keyframeId: ref.keyframeId,
+          updates,
+        })),
+      )
+    },
+    [_updateKeyframe],
+  )
+
   const propertyGridStyle = useMemo(
     () => ({ display: 'grid', gridTemplateColumns: `${OUTLINER_WIDTH}px 1fr` }) as const,
     [],
@@ -624,6 +701,9 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
               selectedKeyframes={selectedKeyframes}
               onKeyframePointerDown={handleKeyframePointerDown}
               previewByItemId={previewByItemId}
+              onSegmentEasingChange={handleSegmentEasingChange}
+              onSegmentDragStart={handleSegmentDragStart}
+              onSegmentDragEnd={handleSegmentDragEnd}
             />
           ))
         )}

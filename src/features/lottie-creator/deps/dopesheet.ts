@@ -18,3 +18,4 @@ export type {
   KeyframeMeta,
 } from '@/features/keyframes/components/dopesheet-editor/dopesheet-types'
 export type { BlockedFrameRange } from '@/features/keyframes/utils/transition-region'
+export type { SegmentEasingChange } from '@/features/keyframes/components/dopesheet-editor/segment-easing-popover'

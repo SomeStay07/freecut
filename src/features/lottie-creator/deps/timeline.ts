@@ -22,3 +22,6 @@ export { useKeyframeSelectionStore } from '@/features/timeline/stores/keyframe-s
 export { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants'
 export { KeyframeGraphPanel } from '@/features/timeline/components/keyframe-graph-panel'
 export { useTimelineCommandStore } from '@/features/timeline/stores/timeline-command-store'
+export { captureSnapshot } from '@/features/timeline/stores/commands/snapshot'
+export type { TimelineSnapshot } from '@/features/timeline/stores/commands/types'
+export { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
