@@ -408,7 +408,12 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
       }
 
       const { viewport: startViewport, timelineWidth: startWidth } = dragLayoutRef.current
-      const startFrame = getFrameFromAxisX(event.clientX, startViewport, startWidth)
+      const timelineLeft = () => timelineRef.current?.getBoundingClientRect().left ?? 0
+      const startFrame = getFrameFromAxisX(
+        event.clientX - timelineLeft(),
+        startViewport,
+        startWidth,
+      )
 
       dragRef.current = {
         refs,
@@ -429,7 +434,11 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
         if (!session || session.pointerId !== moveEvent.pointerId) return
 
         const { viewport, timelineWidth, compDuration } = dragLayoutRef.current
-        const currentFrame = getFrameFromAxisX(moveEvent.clientX, viewport, timelineWidth)
+        const currentFrame = getFrameFromAxisX(
+          moveEvent.clientX - timelineLeft(),
+          viewport,
+          timelineWidth,
+        )
         const deltaFrames = currentFrame - session.startFrame
         if (deltaFrames !== 0) session.moved = true
 
@@ -451,7 +460,11 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
 
         if (session.moved) {
           const { viewport, timelineWidth, compDuration } = dragLayoutRef.current
-          const currentFrame = getFrameFromAxisX(endEvent.clientX, viewport, timelineWidth)
+          const currentFrame = getFrameFromAxisX(
+            endEvent.clientX - timelineLeft(),
+            viewport,
+            timelineWidth,
+          )
           const deltaFrames = currentFrame - session.startFrame
 
           const payloads = session.refs.flatMap((r) => {
@@ -491,8 +504,15 @@ export function LottieLayersTimeline({ comp }: { comp: SubComposition }) {
   const rulerDraggingRef = useRef(false)
   const scrubToClientX = useCallback(
     (clientX: number) => {
+      // `getFrameFromAxisX` expects an x relative to the timeline column's left
+      // edge, not raw screen coords — convert via the ruler element's rect
+      // (the drag hooks get away with raw clientX because they use deltas, which
+      // cancel the offset; the scrub maps to an absolute frame, so it must not).
+      const node = timelineRef.current
+      if (!node) return
+      const localX = clientX - node.getBoundingClientRect().left
       const frame = clampFrame(
-        getFrameFromAxisX(clientX, viewport, timelineWidth),
+        getFrameFromAxisX(localX, viewport, timelineWidth),
         comp.durationInFrames,
       )
       usePlaybackStore.getState().setCurrentFrame(frame)
