@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect, memo, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Layers, Trash2, ChevronRight } from 'lucide-react'
+import { Layers, Trash2, ChevronRight, LayoutTemplate } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   ContextMenu,
@@ -22,12 +22,14 @@ import { cn } from '@/shared/ui/cn'
 import { useEditorStore } from '@/shared/state/editor'
 import {
   deleteCompoundClips,
+  getLibraryVisibleCompositions,
   getCompoundClipDeletionImpact,
   openComposition,
   openCompositionAsTab,
   renameCompoundClip,
   useCompositionsStore,
   useCompositionNavigationStore,
+  useMotionLayoutDialogStore,
   useSequencesStore,
   type SubComposition,
   wouldCreateCompositionCycle,
@@ -77,15 +79,19 @@ export function CompositionsSection() {
   // membership distinguishes them. Partition for display (sequences first),
   // but keep a single flat ordered list so range-select spans both groups.
   const sequenceIdSet = useMemo(() => new Set(topLevelSequenceIds), [topLevelSequenceIds])
+  const libraryCompositions = useMemo(
+    () => getLibraryVisibleCompositions(compositions),
+    [compositions],
+  )
   const { sequences, compoundClips } = useMemo(() => {
     const seqs: SubComposition[] = []
     const clips: SubComposition[] = []
-    for (const comp of compositions) {
+    for (const comp of libraryCompositions) {
       if (sequenceIdSet.has(comp.id)) seqs.push(comp)
       else clips.push(comp)
     }
     return { sequences: seqs, compoundClips: clips }
-  }, [compositions, sequenceIdSet])
+  }, [libraryCompositions, sequenceIdSet])
   const orderedCompositions = useMemo(
     () => [...sequences, ...compoundClips],
     [sequences, compoundClips],
@@ -109,6 +115,11 @@ export function CompositionsSection() {
   }, [editValue])
 
   const handleEnter = useCallback((comp: SubComposition) => {
+    if (comp.motionLayout) {
+      useMotionLayoutDialogStore.getState().openExisting(comp.id)
+      useEditorStore.getState().setWorkspace('motion')
+      return
+    }
     // Sequence tabs switch to their own tab; plain compound clips drill in.
     openComposition(comp.id, comp.name)
   }, [])
@@ -195,7 +206,7 @@ export function CompositionsSection() {
   const cardHandlersById = useMemo(
     () =>
       new Map(
-        compositions.map((comp) => [
+        orderedCompositions.map((comp) => [
           comp.id,
           {
             onSelect: (event: React.MouseEvent) => handleCompositionSelect(comp.id, event),
@@ -207,7 +218,7 @@ export function CompositionsSection() {
         ]),
       ),
     [
-      compositions,
+      orderedCompositions,
       handleCompositionSelect,
       handleDeleteRequest,
       handleEnter,
@@ -226,7 +237,7 @@ export function CompositionsSection() {
     ? useSequencesStore.getState().isTopLevelSequence(deleteTarget.id)
     : false
 
-  if (compositions.length === 0) return null
+  if (libraryCompositions.length === 0) return null
 
   const groupContainerClassName =
     viewMode === 'grid'
@@ -284,7 +295,7 @@ export function CompositionsSection() {
             {t('media.compositions.sectionTitle')}
           </span>
           <span className="text-[10px] tabular-nums text-muted-foreground">
-            {compositions.length}
+            {libraryCompositions.length}
           </span>
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-1 pb-2 space-y-2">
@@ -564,6 +575,9 @@ const CompositionCardInternal = memo(function CompositionCardInternal({
   }, [canHoverPreview, clearCompoundClipSkimPreview])
 
   const itemCount = composition.items.length
+  const isMotionLayout = composition.assetRole === 'motion-layout' || !!composition.motionLayout
+  const motionSourceCount =
+    composition.motionLayout?.slotOrder?.length ?? composition.motionLayout?.slots.length ?? 0
   const fps = composition.fps || 30
   const durationSecs = composition.durationInFrames / fps
   const durationLabel =
@@ -577,6 +591,7 @@ const CompositionCardInternal = memo(function CompositionCardInternal({
         <ContextMenuTrigger asChild>
           <div
             data-composition-id={composition.id}
+            data-composition-role={isMotionLayout ? 'motion-layout' : 'compound'}
             draggable={!dragDisabled && !isEditing}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
@@ -613,8 +628,13 @@ const CompositionCardInternal = memo(function CompositionCardInternal({
               )}
 
               <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between gap-1 pointer-events-none">
-                <div className="p-0.5 rounded bg-violet-600/90 text-white">
-                  <Layers className="w-2.5 h-2.5" />
+                <div className="flex items-center gap-1 rounded bg-violet-600/90 px-1 py-0.5 text-[8px] font-medium text-white">
+                  {isMotionLayout ? (
+                    <LayoutTemplate className="w-2.5 h-2.5" />
+                  ) : (
+                    <Layers className="w-2.5 h-2.5" />
+                  )}
+                  {isMotionLayout ? t('media.compositions.motionBadge') : null}
                 </div>
                 <div className="px-1 py-0.5 bg-black/70 border border-white/20 rounded text-[8px] font-mono text-white">
                   {durationLabel}
@@ -641,9 +661,18 @@ const CompositionCardInternal = memo(function CompositionCardInternal({
                       className="w-full bg-transparent border border-primary rounded px-1 py-0.5 text-[10px] text-foreground outline-none"
                     />
                   ) : (
-                    <h3 className="text-[10px] font-medium text-foreground truncate group-hover:text-violet-400 transition-colors">
-                      {composition.name}
-                    </h3>
+                    <>
+                      <h3 className="text-[10px] font-medium text-foreground truncate group-hover:text-violet-400 transition-colors">
+                        {composition.name}
+                      </h3>
+                      {isMotionLayout ? (
+                        <p className="text-[9px] text-muted-foreground truncate">
+                          {t('media.compositions.motionSourceCount', {
+                            count: motionSourceCount,
+                          })}
+                        </p>
+                      ) : null}
+                    </>
                   )}
                 </div>
               </div>
@@ -655,7 +684,9 @@ const CompositionCardInternal = memo(function CompositionCardInternal({
         </ContextMenuTrigger>
 
         <ContextMenuContent>
-          <ContextMenuItem onClick={onEnter}>{t('media.compositions.enter')}</ContextMenuItem>
+          <ContextMenuItem onClick={onEnter}>
+            {t(isMotionLayout ? 'media.compositions.editMotionLayout' : 'media.compositions.enter')}
+          </ContextMenuItem>
           <ContextMenuItem onClick={onOpenAsTab}>
             {t('media.compositions.openAsTab')}
           </ContextMenuItem>
@@ -675,6 +706,7 @@ const CompositionCardInternal = memo(function CompositionCardInternal({
       <ContextMenuTrigger asChild>
         <div
           data-composition-id={composition.id}
+          data-composition-role={isMotionLayout ? 'motion-layout' : 'compound'}
           draggable={!dragDisabled && !isEditing}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
@@ -732,10 +764,17 @@ const CompositionCardInternal = memo(function CompositionCardInternal({
             )}
             <div className="flex items-center gap-2 mt-0.5">
               <div className="p-0.5 rounded bg-violet-600/90 text-white flex-shrink-0">
-                <Layers className="w-2.5 h-2.5" />
+                {isMotionLayout ? (
+                  <LayoutTemplate className="w-2.5 h-2.5" />
+                ) : (
+                  <Layers className="w-2.5 h-2.5" />
+                )}
               </div>
               <span className="text-[10px] text-muted-foreground">
-                {durationLabel} &middot; {t('media.compositions.itemCount', { count: itemCount })}
+                {durationLabel} &middot;{' '}
+                {isMotionLayout
+                  ? t('media.compositions.motionSourceCount', { count: motionSourceCount })
+                  : t('media.compositions.itemCount', { count: itemCount })}
               </span>
             </div>
           </div>
@@ -743,7 +782,9 @@ const CompositionCardInternal = memo(function CompositionCardInternal({
       </ContextMenuTrigger>
 
       <ContextMenuContent>
-        <ContextMenuItem onClick={onEnter}>{t('media.compositions.enter')}</ContextMenuItem>
+        <ContextMenuItem onClick={onEnter}>
+          {t(isMotionLayout ? 'media.compositions.editMotionLayout' : 'media.compositions.enter')}
+        </ContextMenuItem>
         <ContextMenuItem onClick={onOpenAsTab}>{t('media.compositions.openAsTab')}</ContextMenuItem>
         <ContextMenuItem onClick={onStartRename}>{t('media.compositions.rename')}</ContextMenuItem>
         <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">

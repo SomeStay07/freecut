@@ -27,6 +27,7 @@ import {
   unregisterDomVideoElement,
 } from '../utils/dom-video-element-registry'
 import { subscribeToWarmupActivity } from '../utils/activity-rewarm'
+import { setNativeMediaPlaybackRate } from '../utils/media-playback-rate'
 import { ProResPreviewCanvas } from './prores-preview-canvas'
 import {
   applyVideoElementAudioState,
@@ -357,7 +358,7 @@ const NativePreviewVideo: React.FC<{
       // Split boundary during playback: element was just paused by cleanup
       // but is at the right position. Resume immediately to minimize the
       // decode pipeline interruption (pause→play in same synchronous batch).
-      element.playbackRate = initialPlaybackRate
+      setNativeMediaPlaybackRate(element, initialPlaybackRate)
       element.play().catch(() => {})
       needsInitialSyncRef.current = false
     } else if (currentlyPlaying) {
@@ -365,7 +366,7 @@ const NativePreviewVideo: React.FC<{
       // shadow mount, or resume near a boundary). Seek and play immediately
       // instead of pausing and waiting for the sync effect next frame.
       // This eliminates ~16-50ms of React scheduling + readyState gate delay.
-      element.playbackRate = initialPlaybackRate
+      setNativeMediaPlaybackRate(element, initialPlaybackRate)
       element.currentTime = clampedInitial
       if (element.readyState >= 2) {
         element.play().catch(() => {})
@@ -405,7 +406,7 @@ const NativePreviewVideo: React.FC<{
           element.pause()
           element.playbackRate = 1
         } else {
-          element.playbackRate = playbackRateRef.current
+          setNativeMediaPlaybackRate(element, playbackRateRef.current)
           element.play().catch(() => {})
         }
         needsInitialSyncRef.current = false
@@ -595,7 +596,7 @@ const NativePreviewVideo: React.FC<{
         sharedTransitionSync,
       })
     ) {
-      video.playbackRate = playbackRate
+      setNativeMediaPlaybackRate(video, playbackRate)
     }
 
     const syncContext = getVideoSyncTargetContext({
@@ -658,7 +659,7 @@ const NativePreviewVideo: React.FC<{
         sharedTransitionSync,
       })
     ) {
-      video.playbackRate = playbackRate
+      setNativeMediaPlaybackRate(video, playbackRate)
     }
 
     // Update sequenceFrom for rVFC callback.
@@ -880,7 +881,7 @@ const NativePreviewVideo: React.FC<{
     ensureAudioContextResumed()
 
     // Set initial playbackRate when RVFC takes over
-    video.playbackRate = playbackRateRef.current
+    setNativeMediaPlaybackRate(video, playbackRateRef.current)
 
     let handle: number
     const onVideoFrame = () => {
@@ -934,7 +935,7 @@ const NativePreviewVideo: React.FC<{
           // Seek may fail if element isn't fully loaded
         }
       }
-      v.playbackRate = correctionPlan.playbackRate
+      setNativeMediaPlaybackRate(v, correctionPlan.playbackRate)
 
       handle = v.requestVideoFrameCallback(onVideoFrame)
     }
@@ -944,7 +945,7 @@ const NativePreviewVideo: React.FC<{
       video.cancelVideoFrameCallback(handle)
       // Reset to nominal rate when RVFC stops managing
       if (elementRef.current) {
-        elementRef.current.playbackRate = playbackRateRef.current
+        setNativeMediaPlaybackRate(elementRef.current, playbackRateRef.current)
       }
     }
   }, [clock, isPlaying, isReversed, poolClipId, sharedTransitionSync])

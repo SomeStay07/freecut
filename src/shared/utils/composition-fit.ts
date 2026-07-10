@@ -9,6 +9,12 @@ export interface CompositionFitLayout {
   scaleY: number
 }
 
+export interface CompositionFraming {
+  scale?: number
+  offsetX?: number
+  offsetY?: number
+}
+
 /**
  * Fit an authored composition canvas into a wrapper viewport.
  * `cover` and `contain` always use one uniform scale, preventing distortion.
@@ -50,5 +56,32 @@ export function calculateCompositionFitLayout(
     height,
     scaleX: scale,
     scaleY: scale,
+  }
+}
+
+/** Apply user framing to fitted content while keeping it clipped by its wrapper. */
+export function applyCompositionFraming(
+  layout: CompositionFitLayout,
+  targetWidth: number,
+  targetHeight: number,
+  framing: CompositionFraming = {},
+): CompositionFitLayout {
+  const scale = Math.max(1, Math.min(4, framing.scale ?? 1))
+  const offsetX = Math.max(-1, Math.min(1, framing.offsetX ?? 0))
+  const offsetY = Math.max(-1, Math.min(1, framing.offsetY ?? 0))
+  const width = layout.width * scale
+  const height = layout.height * scale
+  const centeredX = (targetWidth - width) / 2
+  const centeredY = (targetHeight - height) / 2
+  const panX = Math.max(0, width - targetWidth) * 0.5 * offsetX
+  const panY = Math.max(0, height - targetHeight) * 0.5 * offsetY
+
+  return {
+    offsetX: centeredX + panX,
+    offsetY: centeredY + panY,
+    width,
+    height,
+    scaleX: layout.scaleX * scale,
+    scaleY: layout.scaleY * scale,
   }
 }

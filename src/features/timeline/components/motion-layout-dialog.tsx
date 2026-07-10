@@ -15,6 +15,7 @@ import {
   LayoutTemplate,
   Plus,
   RotateCcw,
+  SlidersHorizontal,
   X,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
@@ -44,6 +45,7 @@ import type {
   MotionLayoutFrameAspect,
   MotionLayoutParameterKey,
   MotionLayoutSettings,
+  MotionLayoutSlotAdjustment,
   MotionLayoutTemplateId,
 } from '@/types/motion-layout'
 import type { TimelineItem } from '@/types/timeline'
@@ -77,7 +79,37 @@ interface MotionSourceEntry {
   label: string
   mediaId?: string
   thumbnailUrl?: string
+  previewSrc?: string
   type: TimelineItem['type']
+  durationInFrames: number
+  fps: number
+}
+
+const DEFAULT_SLOT_ADJUSTMENT: MotionLayoutSlotAdjustment = {
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+  sourceStart: 0,
+  sourceEnd: 1,
+}
+
+function resolveSlotAdjustmentWindow(
+  source: MotionSourceEntry,
+  layoutDurationSeconds: number,
+  adjustment?: MotionLayoutSlotAdjustment,
+): MotionLayoutSlotAdjustment {
+  const sourceDurationSeconds = source.durationInFrames / Math.max(1, source.fps)
+  const windowRatio = Math.min(1, layoutDurationSeconds / Math.max(0.01, sourceDurationSeconds))
+  const sourceStart = Math.max(
+    0,
+    Math.min(1 - windowRatio, adjustment?.sourceStart ?? DEFAULT_SLOT_ADJUSTMENT.sourceStart),
+  )
+  return {
+    ...DEFAULT_SLOT_ADJUSTMENT,
+    ...adjustment,
+    sourceStart,
+    sourceEnd: sourceStart + windowRatio,
+  }
 }
 
 function getItemMediaId(item: TimelineItem | undefined): string | undefined {
@@ -95,38 +127,70 @@ function useMediaPosterUrls(mediaIds: readonly string[]): Map<string, string> {
   )
 
   useEffect(() => {
-    const missing = Object.entries(thumbnailIds)
-      .filter(([id, thumbnailId]) => thumbnailId && !posterUrls.has(id))
-      .map(([id]) => id)
-    if (missing.length === 0) return
+    const candidates = Object.entries(thumbnailIds).filter((entry): entry is [string, string] =>
+      Boolean(entry[1]),
+    )
+    if (candidates.length === 0) {
+      setPosterUrls((current) => (current.size === 0 ? current : new Map()))
+      return
+    }
 
     let cancelled = false
     void importMediaLibraryService().then(async ({ mediaLibraryService }) => {
       const settled = await Promise.allSettled(
-        missing.map(async (id) => [id, await mediaLibraryService.getThumbnailBlobUrl(id)] as const),
+        candidates.map(
+          async ([id, thumbnailId]) =>
+            [id, await mediaLibraryService.getThumbnailBlobUrl(id, thumbnailId)] as const,
+        ),
       )
       if (cancelled) return
       setPosterUrls((current) => {
-        const next = new Map(current)
-        let changed = false
+        const next = new Map<string, string>()
         for (const result of settled) {
           if (result.status !== 'fulfilled') continue
           const [id, url] = result.value
-          if (url && !next.has(id)) {
-            next.set(id, url)
-            changed = true
-          }
+          if (url) next.set(id, url)
         }
-        return changed ? next : current
+        if (next.size === current.size && [...next].every(([id, url]) => current.get(id) === url)) {
+          return current
+        }
+        return next
       })
     })
 
     return () => {
       cancelled = true
     }
-  }, [posterUrls, thumbnailIds])
+  }, [thumbnailIds])
 
   return posterUrls
+}
+
+function useMediaPreviewUrl(mediaId?: string, fallbackUrl?: string): string | undefined {
+  const [url, setUrl] = useState<string | undefined>(fallbackUrl)
+
+  useEffect(() => {
+    let cancelled = false
+    let createdUrl: string | null = null
+    setUrl(fallbackUrl)
+    if (!mediaId) return
+
+    void importMediaLibraryService()
+      .then(({ mediaLibraryService }) => mediaLibraryService.getMediaBlobUrl(mediaId))
+      .then((nextUrl) => {
+        if (!nextUrl) return
+        createdUrl = nextUrl
+        if (!cancelled) setUrl(nextUrl)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+      if (createdUrl) URL.revokeObjectURL(createdUrl)
+    }
+  }, [fallbackUrl, mediaId])
+
+  return url
 }
 
 function buildChainOrder(
@@ -861,8 +925,10 @@ function MediaSlotsPanel({
   chains,
   sources,
   posterUrls,
-  activeSlotIndex,
-  onActiveSlotChange,
+  pickerSlotIndex,
+  selectedSlotIndex,
+  onPickerSlotChange,
+  onSelectedSlotChange,
   onAssign,
   onRemove,
   onMove,
@@ -871,8 +937,10 @@ function MediaSlotsPanel({
   chains: string[][]
   sources: MotionSourceEntry[]
   posterUrls: Map<string, string>
-  activeSlotIndex: number | null
-  onActiveSlotChange: (index: number | null) => void
+  pickerSlotIndex: number | null
+  selectedSlotIndex: number | null
+  onPickerSlotChange: (index: number | null) => void
+  onSelectedSlotChange: (index: number | null) => void
   onAssign: (index: number, sourceId: string) => void
   onRemove: (index: number) => void
   onMove: (from: number, to: number) => void
@@ -936,8 +1004,8 @@ function MediaSlotsPanel({
           return (
             <div key={`slot:${index}`} className="group flex items-center gap-1">
               <Popover
-                open={activeSlotIndex === index}
-                onOpenChange={(open) => onActiveSlotChange(open ? index : null)}
+                open={pickerSlotIndex === index}
+                onOpenChange={(open) => onPickerSlotChange(open ? index : null)}
               >
                 <PopoverTrigger asChild>
                   <button
@@ -952,7 +1020,7 @@ function MediaSlotsPanel({
                       chain
                         ? 'border-border/80 bg-background hover:bg-muted/50'
                         : 'border-dashed border-border/80 bg-muted/20 text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-foreground',
-                      activeSlotIndex === index && 'border-primary/70 bg-primary/8',
+                      selectedSlotIndex === index && 'border-primary/70 bg-primary/8',
                     )}
                   >
                     {thumbnailUrl || chain ? (
@@ -1035,6 +1103,18 @@ function MediaSlotsPanel({
                 <div className="flex shrink-0 items-center">
                   <button
                     type="button"
+                    onClick={() => onSelectedSlotChange(index)}
+                    className={cn(
+                      'rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70',
+                      selectedSlotIndex === index && 'bg-primary/10 text-primary',
+                    )}
+                    aria-label={`Adjust ${source?.label ?? `Slot ${index + 1}`}`}
+                    aria-pressed={selectedSlotIndex === index}
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
                     disabled={index === 0}
                     onClick={() => onMove(index, index - 1)}
                     className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 disabled:opacity-20"
@@ -1064,6 +1144,152 @@ function MediaSlotsPanel({
             </div>
           )
         })}
+      </div>
+    </section>
+  )
+}
+
+function SlotAdjustmentPanel({
+  slotIndex,
+  source,
+  adjustment,
+  layoutDurationSeconds,
+  onChange,
+  onReset,
+}: {
+  slotIndex: number
+  source: MotionSourceEntry
+  adjustment: MotionLayoutSlotAdjustment
+  layoutDurationSeconds: number
+  onChange: (adjustment: MotionLayoutSlotAdjustment) => void
+  onReset: () => void
+}) {
+  const { t } = useTranslation()
+  const safeLayoutDurationSeconds =
+    Number.isFinite(layoutDurationSeconds) && layoutDurationSeconds > 0 ? layoutDurationSeconds : 1
+  const durationSeconds = source.durationInFrames / Math.max(1, source.fps)
+  const windowRatio = Math.min(1, safeLayoutDurationSeconds / Math.max(0.01, durationSeconds))
+  const formatRangeTime = (ratio: number) => `${(durationSeconds * ratio).toFixed(1)}s`
+  const update = (patch: Partial<MotionLayoutSlotAdjustment>) =>
+    onChange({ ...adjustment, ...patch })
+  const updateSourceStart = (percent: number) => {
+    const sourceStart = Math.max(0, Math.min(1 - windowRatio, percent / 100))
+    update({ sourceStart, sourceEnd: sourceStart + windowRatio })
+  }
+  const updateSourceEnd = (percent: number) => {
+    const sourceEnd = Math.max(windowRatio, Math.min(1, percent / 100))
+    update({ sourceStart: sourceEnd - windowRatio, sourceEnd })
+  }
+
+  return (
+    <section className="border-t border-border/70 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+            {t('timeline.motionLayout.adjust.title')}
+          </p>
+          <p className="mt-1 truncate text-xs font-medium">
+            {slotIndex + 1}. {source.label}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onReset}
+          className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+          aria-label={t('timeline.motionLayout.adjust.reset')}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+        {t('timeline.motionLayout.adjust.dragHint')}
+      </p>
+
+      <div className="mt-3 space-y-2">
+        <SliderInput
+          label={t('timeline.motionLayout.adjust.zoom')}
+          value={adjustment.scale * 100}
+          min={100}
+          max={300}
+          step={1}
+          unit="%"
+          liveChangeThrottleMs={32}
+          onLiveChange={(value) => update({ scale: value / 100 })}
+          onChange={(value) => update({ scale: value / 100 })}
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <SliderInput
+            label="X"
+            value={adjustment.offsetX * 100}
+            min={-100}
+            max={100}
+            step={1}
+            unit="%"
+            liveChangeThrottleMs={32}
+            onLiveChange={(value) => update({ offsetX: value / 100 })}
+            onChange={(value) => update({ offsetX: value / 100 })}
+          />
+          <SliderInput
+            label="Y"
+            value={adjustment.offsetY * 100}
+            min={-100}
+            max={100}
+            step={1}
+            unit="%"
+            liveChangeThrottleMs={32}
+            onLiveChange={(value) => update({ offsetY: value / 100 })}
+            onChange={(value) => update({ offsetY: value / 100 })}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-border/60 pt-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[10px] font-medium text-muted-foreground">
+            {t('timeline.motionLayout.adjust.sourceRange')}
+          </p>
+          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+            {formatRangeTime(adjustment.sourceStart)} – {formatRangeTime(adjustment.sourceEnd)}
+          </span>
+        </div>
+        <p className="mt-1 text-[9px] text-muted-foreground">
+          {safeLayoutDurationSeconds.toFixed(1)}s · {t('timeline.motionLayout.adjust.normalSpeed')}
+        </p>
+        <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
+          <div
+            className="absolute inset-y-0 rounded-full bg-primary"
+            style={{
+              left: `${adjustment.sourceStart * 100}%`,
+              right: `${(1 - adjustment.sourceEnd) * 100}%`,
+            }}
+          />
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <SliderInput
+            label={t('timeline.motionLayout.adjust.in')}
+            value={adjustment.sourceStart * 100}
+            min={0}
+            max={windowRatio >= 0.999 ? 100 : (1 - windowRatio) * 100}
+            step={1}
+            disabled={windowRatio >= 0.999}
+            formatValue={(value) => formatRangeTime(value / 100)}
+            liveChangeThrottleMs={32}
+            onLiveChange={updateSourceStart}
+            onChange={updateSourceStart}
+          />
+          <SliderInput
+            label={t('timeline.motionLayout.adjust.out')}
+            value={adjustment.sourceEnd * 100}
+            min={windowRatio >= 0.999 ? 0 : windowRatio * 100}
+            max={100}
+            step={1}
+            disabled={windowRatio >= 0.999}
+            formatValue={(value) => formatRangeTime(value / 100)}
+            liveChangeThrottleMs={32}
+            onLiveChange={updateSourceEnd}
+            onChange={updateSourceEnd}
+          />
+        </div>
       </div>
     </section>
   )
@@ -1124,7 +1350,22 @@ function MotionLayoutDialogBody({
   const [frameAspect, setFrameAspect] = useState<MotionLayoutFrameAspect>(initialFrameAspect)
   const { width, height } = resolveMotionLayoutFrameSize(projectWidth, projectHeight, frameAspect)
   const [leftPanel, setLeftPanel] = useState<'templates' | 'layouts'>('templates')
-  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null)
+  const [pickerSlotIndex, setPickerSlotIndex] = useState<number | null>(null)
+  const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null)
+  const initialSlotAdjustments = useMemo(
+    () =>
+      Object.fromEntries(
+        (editingMotionLayout?.slots ?? []).flatMap((slot) =>
+          slot.adjustment
+            ? [[slot.compositionId, { ...DEFAULT_SLOT_ADJUSTMENT, ...slot.adjustment }] as const]
+            : [],
+        ),
+      ) as Record<string, MotionLayoutSlotAdjustment>,
+    [editingMotionLayout?.slots],
+  )
+  const [slotAdjustments, setSlotAdjustments] = useState<
+    Record<string, MotionLayoutSlotAdjustment>
+  >(() => initialSlotAdjustments)
   const [pendingNavigation, setPendingNavigation] = useState<'exit' | 'new' | 'layout' | null>(null)
   const [pendingCompositionId, setPendingCompositionId] = useState<string | null>(null)
   const initialDraftSignature = useMemo(
@@ -1134,8 +1375,9 @@ function MotionLayoutDialogBody({
         templateId: editingMotionLayout?.templateId ?? 'grid-reveal',
         frameAspect: initialFrameAspect,
         settings: editingMotionLayout?.settings ?? createDefaultMotionLayoutSettings('grid-reveal'),
+        slotAdjustments: initialSlotAdjustments,
       }),
-    [editingMotionLayout, initialChains, initialFrameAspect],
+    [editingMotionLayout, initialChains, initialFrameAspect, initialSlotAdjustments],
   )
   const [savedDraftSignature, setSavedDraftSignature] = useState(initialDraftSignature)
   const template = MOTION_LAYOUT_TEMPLATE_BY_ID[selectedTemplateId]
@@ -1162,6 +1404,25 @@ function MotionLayoutDialogBody({
       editingSlotByCompositionId.get(id)?.label ?? resolveSlotItem(id)?.label ?? id.slice(0, 6),
     [editingSlotByCompositionId, resolveSlotItem],
   )
+  const resolvePreviewVideoItem = useCallback(
+    (id: string): Extract<TimelineItem, { type: 'video' }> | undefined => {
+      let item = resolveSlotItem(id)
+      const visitedCompositionIds = new Set<string>()
+      for (let depth = 0; item && depth < 6; depth += 1) {
+        if (item.type === 'video') return item
+        if (item.type !== 'composition' || visitedCompositionIds.has(item.compositionId)) {
+          return undefined
+        }
+        visitedCompositionIds.add(item.compositionId)
+        const composition = compositionById[item.compositionId]
+        item =
+          composition?.items.find((candidate) => candidate.type === 'video') ??
+          composition?.items.find((candidate) => candidate.type !== 'audio')
+      }
+      return undefined
+    },
+    [compositionById, resolveSlotItem],
+  )
   const sourceEntries = useMemo(() => {
     const entries = new Map<string, MotionSourceEntry>()
     for (const slot of editingMotionLayout?.slots ?? []) {
@@ -1169,15 +1430,21 @@ function MotionLayoutDialogBody({
         compositionById[slot.compositionId]?.items.find(
           (candidate) => candidate.type !== 'audio',
         ) ?? compositionById[slot.compositionId]?.items[0]
+      const previewVideo = resolvePreviewVideoItem(slot.compositionId)
       entries.set(slot.compositionId, {
         id: slot.compositionId,
         label: slot.label,
-        mediaId: getItemMediaId(item),
+        mediaId: getItemMediaId(previewVideo ?? item),
         thumbnailUrl:
-          item && 'thumbnailUrl' in item && typeof item.thumbnailUrl === 'string'
+          previewVideo?.thumbnailUrl ??
+          (item && 'thumbnailUrl' in item && typeof item.thumbnailUrl === 'string'
             ? item.thumbnailUrl
-            : undefined,
+            : undefined),
+        previewSrc: previewVideo?.src,
         type: item?.type ?? 'video',
+        durationInFrames:
+          compositionById[slot.compositionId]?.durationInFrames ?? item?.durationInFrames ?? fps,
+        fps: compositionById[slot.compositionId]?.fps ?? fps,
       })
     }
     for (const item of items) {
@@ -1187,24 +1454,44 @@ function MotionLayoutDialogBody({
       ) {
         continue
       }
+      const previewVideo = resolvePreviewVideoItem(item.id)
       entries.set(item.id, {
         id: item.id,
         label: item.label,
-        mediaId: getItemMediaId(item),
+        mediaId: getItemMediaId(previewVideo ?? item),
         thumbnailUrl:
           'thumbnailUrl' in item && typeof item.thumbnailUrl === 'string'
             ? item.thumbnailUrl
             : undefined,
+        previewSrc: previewVideo?.src,
         type: item.type,
+        durationInFrames: item.sourceDuration ?? item.durationInFrames,
+        fps: item.sourceFps ?? fps,
       })
     }
     return [...entries.values()]
-  }, [compositionById, editingComposition, editingMotionLayout?.slots, items])
+  }, [
+    compositionById,
+    editingComposition,
+    editingMotionLayout?.slots,
+    fps,
+    items,
+    resolvePreviewVideoItem,
+  ])
   const sourceMediaIds = useMemo(
     () => sourceEntries.flatMap((source) => (source.mediaId ? [source.mediaId] : [])),
     [sourceEntries],
   )
   const posterUrls = useMediaPosterUrls(sourceMediaIds)
+  const selectedPreviewSourceId =
+    selectedSlotIndex === null ? undefined : visibleChains[selectedSlotIndex]?.[0]
+  const selectedPreviewSource = selectedPreviewSourceId
+    ? sourceEntries.find((source) => source.id === selectedPreviewSourceId)
+    : undefined
+  const selectedPreviewUrl = useMediaPreviewUrl(
+    selectedPreviewSource?.mediaId,
+    selectedPreviewSource?.previewSrc,
+  )
   const assignSourceToSlot = useCallback((slotIndex: number, sourceId: string) => {
     setChainOrder((current) => {
       const existingIndex = current.findIndex((chain) => chain.includes(sourceId))
@@ -1214,11 +1501,17 @@ function MotionLayoutDialogBody({
       else if (slotIndex === next.length) next.push([sourceId])
       return next
     })
-    setActiveSlotIndex(null)
+    setPickerSlotIndex(null)
+    setSelectedSlotIndex(slotIndex)
   }, [])
   const removeSlot = useCallback((slotIndex: number) => {
     setChainOrder((current) => current.filter((_, index) => index !== slotIndex))
-    setActiveSlotIndex(null)
+    setPickerSlotIndex(null)
+    setSelectedSlotIndex((current) => {
+      if (current === null) return null
+      if (current === slotIndex) return null
+      return current > slotIndex ? current - 1 : current
+    })
   }, [])
   const previewSlotCount = Math.min(
     template.maxSlots,
@@ -1233,6 +1526,10 @@ function MotionLayoutDialogBody({
       Array.from({ length: previewSlotCount }, (_, index) => {
         const chain = visibleChains[index]
         const first = chain ? resolveSlotItem(chain[0]!) : undefined
+        const previewVideo = chain ? resolvePreviewVideoItem(chain[0]!) : undefined
+        const sourceEntry = chain
+          ? sourceEntries.find((source) => source.id === chain[0])
+          : undefined
         const labels = chain?.map(resolveSlotLabel) ?? []
         return {
           id: `slot:${index}`,
@@ -1241,14 +1538,43 @@ function MotionLayoutDialogBody({
             t('timeline.motionLayout.workspace.slotPlaceholder', { count: index + 1 }),
           type: first?.type ?? 'video',
           thumbnailUrl:
-            posterUrls.get(getItemMediaId(first) ?? '') ??
+            posterUrls.get(sourceEntry?.mediaId ?? getItemMediaId(first) ?? '') ??
+            sourceEntry?.thumbnailUrl ??
             (first && 'thumbnailUrl' in first && typeof first.thumbnailUrl === 'string'
               ? first.thumbnailUrl
               : undefined),
+          previewSrc:
+            selectedSlotIndex === index
+              ? (selectedPreviewUrl ?? sourceEntry?.previewSrc ?? previewVideo?.src)
+              : undefined,
+          sourceDurationSeconds: sourceEntry
+            ? sourceEntry.durationInFrames / Math.max(1, sourceEntry.fps)
+            : undefined,
           placeholder: !chain,
+          adjustment:
+            chain && sourceEntry
+              ? resolveSlotAdjustmentWindow(
+                  sourceEntry,
+                  settings.durationSeconds,
+                  slotAdjustments[chain[0]!],
+                )
+              : DEFAULT_SLOT_ADJUSTMENT,
         }
       }),
-    [posterUrls, previewSlotCount, resolveSlotItem, resolveSlotLabel, t, visibleChains],
+    [
+      posterUrls,
+      previewSlotCount,
+      resolveSlotItem,
+      resolveSlotLabel,
+      resolvePreviewVideoItem,
+      selectedPreviewUrl,
+      selectedSlotIndex,
+      sourceEntries,
+      settings.durationSeconds,
+      slotAdjustments,
+      t,
+      visibleChains,
+    ],
   )
   const previewPlan = useMemo(
     () =>
@@ -1263,11 +1589,25 @@ function MotionLayoutDialogBody({
     [fps, height, previewSlots, selectedTemplateId, settings, width],
   )
   const canApply = visibleChains.length >= template.minSlots
+  const effectiveSlotAdjustments = Object.fromEntries(
+    visibleChains.flatMap((chain) => {
+      const sourceId = chain[0]
+      const source = sourceEntries.find((entry) => entry.id === sourceId)
+      if (!sourceId || !source) return []
+      return [
+        [
+          sourceId,
+          resolveSlotAdjustmentWindow(source, settings.durationSeconds, slotAdjustments[sourceId]),
+        ],
+      ]
+    }),
+  ) as Record<string, MotionLayoutSlotAdjustment>
   const currentDraftSignature = JSON.stringify({
     chainOrder,
     templateId: selectedTemplateId,
     frameAspect,
     settings,
+    slotAdjustments,
   })
   const isDirty = currentDraftSignature !== savedDraftSignature
 
@@ -1293,7 +1633,7 @@ function MotionLayoutDialogBody({
         ...next.defaults,
         backgroundColor: current.backgroundColor,
       }))
-      setActiveSlotIndex(null)
+      setPickerSlotIndex(null)
     },
     [chainOrder.length, t],
   )
@@ -1306,6 +1646,13 @@ function MotionLayoutDialogBody({
       if (!moved) return current
       next.splice(to, 0, moved)
       return next
+    })
+    setSelectedSlotIndex((current) => {
+      if (current === null) return null
+      if (current === from) return to
+      if (from < to && current > from && current <= to) return current - 1
+      if (to < from && current >= to && current < from) return current + 1
+      return current
     })
   }, [])
 
@@ -1323,6 +1670,7 @@ function MotionLayoutDialogBody({
           frameAspect,
           frameWidth: width,
           frameHeight: height,
+          slotAdjustments: effectiveSlotAdjustments,
           name: generatedName,
         })
       : applyMotionLayout({
@@ -1333,6 +1681,7 @@ function MotionLayoutDialogBody({
           frameAspect,
           frameWidth: width,
           frameHeight: height,
+          slotAdjustments: effectiveSlotAdjustments,
           name: generatedName,
         })
     if (!result) {
@@ -1346,6 +1695,16 @@ function MotionLayoutDialogBody({
       const saved = useCompositionsStore.getState().getComposition(result.compositionId)
       const savedOrder = saved?.motionLayout?.slotOrder
       if (savedOrder) setChainOrder(savedOrder.map((sourceId) => [sourceId]))
+      if (saved?.motionLayout) {
+        setSlotAdjustments(
+          Object.fromEntries(
+            saved.motionLayout.slots.map((slot) => [
+              slot.compositionId,
+              { ...DEFAULT_SLOT_ADJUSTMENT, ...slot.adjustment },
+            ]),
+          ),
+        )
+      }
       return
     }
     close()
@@ -1359,6 +1718,7 @@ function MotionLayoutDialogBody({
     height,
     selectedTemplateId,
     settings,
+    effectiveSlotAdjustments,
     t,
     template,
     visibleChains,
@@ -1394,6 +1754,24 @@ function MotionLayoutDialogBody({
     },
     [compositionId, isDirty],
   )
+
+  const selectedSourceId =
+    selectedSlotIndex === null ? undefined : visibleChains[selectedSlotIndex]?.[0]
+  const selectedSource = selectedSourceId
+    ? sourceEntries.find((source) => source.id === selectedSourceId)
+    : undefined
+  const selectedAdjustment =
+    selectedSourceId && selectedSource
+      ? resolveSlotAdjustmentWindow(
+          selectedSource,
+          settings.durationSeconds,
+          slotAdjustments[selectedSourceId],
+        )
+      : DEFAULT_SLOT_ADJUSTMENT
+  const updateSelectedAdjustment = (adjustment: MotionLayoutSlotAdjustment) => {
+    if (!selectedSourceId) return
+    setSlotAdjustments((current) => ({ ...current, [selectedSourceId]: adjustment }))
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1593,10 +1971,17 @@ function MotionLayoutDialogBody({
             fps={fps}
             backgroundColor={settings.backgroundColor}
             perspectiveAmount={template.category === 'perspective' ? settings.perspective : 0}
-            selectedSlotId={activeSlotIndex === null ? null : `slot:${activeSlotIndex}`}
+            selectedSlotId={selectedSlotIndex === null ? null : `slot:${selectedSlotIndex}`}
             onSelectSlot={(slotId) => {
               const index = Number(slotId.split(':')[1])
-              if (Number.isFinite(index)) setActiveSlotIndex(index)
+              if (Number.isFinite(index) && visibleChains[index]) setSelectedSlotIndex(index)
+            }}
+            onAdjustSlot={(slotId, adjustment) => {
+              const index = Number(slotId.split(':')[1])
+              const sourceId = Number.isFinite(index) ? visibleChains[index]?.[0] : undefined
+              if (!sourceId) return
+              setSelectedSlotIndex(index)
+              setSlotAdjustments((current) => ({ ...current, [sourceId]: adjustment }))
             }}
           />
 
@@ -1677,12 +2062,28 @@ function MotionLayoutDialogBody({
               chains={visibleChains}
               sources={sourceEntries}
               posterUrls={posterUrls}
-              activeSlotIndex={activeSlotIndex}
-              onActiveSlotChange={setActiveSlotIndex}
+              pickerSlotIndex={pickerSlotIndex}
+              selectedSlotIndex={selectedSlotIndex}
+              onPickerSlotChange={setPickerSlotIndex}
+              onSelectedSlotChange={setSelectedSlotIndex}
               onAssign={assignSourceToSlot}
               onRemove={removeSlot}
               onMove={moveSlot}
             />
+            {selectedSlotIndex !== null && selectedSource ? (
+              <SlotAdjustmentPanel
+                slotIndex={selectedSlotIndex}
+                source={selectedSource}
+                adjustment={selectedAdjustment}
+                layoutDurationSeconds={settings.durationSeconds}
+                onChange={updateSelectedAdjustment}
+                onReset={() =>
+                  updateSelectedAdjustment(
+                    resolveSlotAdjustmentWindow(selectedSource, settings.durationSeconds),
+                  )
+                }
+              />
+            ) : null}
             <SettingsPanel
               template={template}
               settings={settings}

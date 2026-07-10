@@ -25,6 +25,7 @@ import {
   renameCompoundClip,
 } from './composition-actions'
 import { splitItem } from './item-actions'
+import { createDefaultMotionLayoutSettings } from '../../utils/motion-layout'
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   return makeTimelineVideoItem({ linkedGroupId: 'group-1', ...overrides })
@@ -578,6 +579,143 @@ describe('composition-actions split wrappers', () => {
     expect(useItemsStore.getState().items.some((item) => item.compositionId === 'comp-a')).toBe(
       false,
     )
+  })
+
+  it('deletes unreferenced managed sources with their Motion Layout owner', () => {
+    setDefaultRootTimelineTracks()
+    useItemsStore.getState().setItems([
+      {
+        id: 'root-layout',
+        type: 'composition',
+        trackId: 'track-v1',
+        from: 0,
+        durationInFrames: 60,
+        label: 'Motion Layout',
+        compositionId: 'layout-a',
+        compositionWidth: 1920,
+        compositionHeight: 1080,
+        transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
+      },
+    ])
+    useCompositionsStore.getState().setCompositions([
+      {
+        id: 'layout-a',
+        name: 'Motion Layout',
+        items: [
+          {
+            id: 'layout-slot-wrapper',
+            type: 'composition',
+            trackId: 'layout-track',
+            from: 0,
+            durationInFrames: 60,
+            label: 'Source A',
+            compositionId: 'slot-a',
+            compositionWidth: 1920,
+            compositionHeight: 1080,
+            transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
+          },
+        ],
+        tracks: [makeTrack({ id: 'layout-track', name: 'Slot 1', order: 0 })],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 60,
+        motionLayout: {
+          templateId: 'grid-reveal',
+          templateVersion: 1,
+          settings: createDefaultMotionLayoutSettings('grid-reveal'),
+          slots: [{ id: 'layout-slot-wrapper', compositionId: 'slot-a', label: 'Source A' }],
+        },
+      },
+      {
+        id: 'slot-a',
+        name: 'Source A',
+        items: [],
+        tracks: [],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 60,
+      },
+    ])
+
+    expect(deleteCompoundClips(['layout-a'])).toBe(true)
+    expect(useCompositionsStore.getState().compositions).toHaveLength(0)
+  })
+
+  it('preserves and promotes a managed source that is referenced outside its owner', () => {
+    setDefaultRootTimelineTracks()
+    useItemsStore.getState().setItems([
+      {
+        id: 'root-layout',
+        type: 'composition',
+        trackId: 'track-v1',
+        from: 0,
+        durationInFrames: 60,
+        label: 'Motion Layout',
+        compositionId: 'layout-a',
+        compositionWidth: 1920,
+        compositionHeight: 1080,
+        transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
+      },
+      {
+        id: 'root-slot',
+        type: 'composition',
+        trackId: 'track-v1',
+        from: 80,
+        durationInFrames: 60,
+        label: 'Source A',
+        compositionId: 'slot-a',
+        compositionWidth: 1920,
+        compositionHeight: 1080,
+        transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
+      },
+    ])
+    useCompositionsStore.getState().setCompositions([
+      {
+        id: 'layout-a',
+        name: 'Motion Layout',
+        items: [],
+        tracks: [],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 60,
+        motionLayout: {
+          templateId: 'grid-reveal',
+          templateVersion: 1,
+          settings: createDefaultMotionLayoutSettings('grid-reveal'),
+          slots: [{ id: 'layout-slot-wrapper', compositionId: 'slot-a', label: 'Source A' }],
+        },
+      },
+      {
+        id: 'slot-a',
+        name: 'Source A',
+        items: [],
+        tracks: [],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 60,
+      },
+    ])
+
+    expect(deleteCompoundClips(['layout-a'])).toBe(true)
+    expect(useCompositionsStore.getState().compositions).toHaveLength(1)
+    expect(useCompositionsStore.getState().getComposition('slot-a')).toMatchObject({
+      assetRole: 'compound',
+      libraryVisibility: 'visible',
+      managedBy: undefined,
+    })
+    expect(useItemsStore.getState().items.map((item) => item.compositionId)).toEqual(['slot-a'])
   })
 
   it('renames compound clips across wrapper labels and breadcrumbs', () => {

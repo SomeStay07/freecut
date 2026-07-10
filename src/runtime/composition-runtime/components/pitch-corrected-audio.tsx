@@ -6,6 +6,7 @@ import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/aud
 import { audioBufferToWavBlob } from '../utils/audio-buffer-wav'
 import { createReversedAudioBuffer } from '../utils/audio-buffer-utils'
 import { getAudioTargetTimeSeconds } from '../utils/video-timing'
+import { setNativeMediaPlaybackRate } from '../utils/media-playback-rate'
 import {
   acquirePreviewAudioElement,
   markPreviewAudioElementUsesWebAudio,
@@ -221,7 +222,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
 
     useEffect(() => {
       if (audioRef.current) {
-        audioRef.current.playbackRate = playbackRate
+        setNativeMediaPlaybackRate(audioRef.current, playbackRate)
       }
     }, [playbackRate])
 

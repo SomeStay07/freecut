@@ -777,6 +777,9 @@ export function buildTimelineFromStores(): ProjectTimeline {
           ...(c.inPoint != null && { inPoint: c.inPoint }),
           ...(c.outPoint != null && { outPoint: c.outPoint }),
           ...(c.motionLayout && { motionLayout: c.motionLayout }),
+          ...(c.assetRole && { assetRole: c.assetRole }),
+          ...(c.libraryVisibility && { libraryVisibility: c.libraryVisibility }),
+          ...(c.managedBy && { managedBy: c.managedBy }),
         })),
       }
     })(),
@@ -1060,6 +1063,9 @@ export async function hydrateTimelineStoresFromProject(project: Project): Promis
           inPoint: c.inPoint ?? null,
           outPoint: c.outPoint ?? null,
           ...(c.motionLayout && { motionLayout: c.motionLayout }),
+          ...(c.assetRole && { assetRole: c.assetRole }),
+          ...(c.libraryVisibility && { libraryVisibility: c.libraryVisibility }),
+          ...(c.managedBy && { managedBy: c.managedBy }),
         })),
       )
       useCompositionsStore.getState().setCompositions(hydratedCompositions)

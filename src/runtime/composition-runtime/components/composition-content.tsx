@@ -50,7 +50,10 @@ import { collectVisibleTextFontFamilies, resolveTrackRenderState } from '../util
 import { getLinkedVideoIdsWithAudio, hasLinkedAudioCompanion } from '@/shared/utils/linked-media'
 import { resolveProxyUrl } from '@/runtime/composition-runtime/deps/media-library'
 import { loadFonts } from '../utils/fonts'
-import { calculateCompositionFitLayout } from '@/shared/utils/composition-fit'
+import {
+  applyCompositionFraming,
+  calculateCompositionFitLayout,
+} from '@/shared/utils/composition-fit'
 
 const EMPTY_AUDIO_EQ_STAGES: ResolvedAudioEqSettings[] = []
 type TrackRenderState = ReturnType<typeof resolveTrackRenderState>
@@ -561,12 +564,21 @@ export const CompositionContent = React.memo<CompositionContentProps>(
     }
 
     const compositionFit = item.type === 'composition' ? (item.compositionFit ?? 'fill') : 'fill'
-    const fitLayout = calculateCompositionFitLayout(
-      subComp.width,
-      subComp.height,
+    const fitLayout = applyCompositionFraming(
+      calculateCompositionFitLayout(
+        subComp.width,
+        subComp.height,
+        containerDims.width,
+        containerDims.height,
+        compositionFit,
+      ),
       containerDims.width,
       containerDims.height,
-      compositionFit,
+      {
+        scale: item.type === 'composition' ? item.compositionScale : undefined,
+        offsetX: item.type === 'composition' ? item.compositionOffsetX : undefined,
+        offsetY: item.type === 'composition' ? item.compositionOffsetY : undefined,
+      },
     )
 
     return (

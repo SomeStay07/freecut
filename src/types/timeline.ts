@@ -312,6 +312,11 @@ export type CompositionItem = BaseTimelineItem & {
   compositionHeight: number
   /** How the authored canvas fits the transformed wrapper. Defaults to legacy `fill`. */
   compositionFit?: CompositionContentFit
+  /** Additional content framing applied inside the wrapper after fitting. */
+  compositionScale?: number
+  /** Normalized content pan offsets (-1..1) inside the clipped wrapper. */
+  compositionOffsetX?: number
+  compositionOffsetY?: number
 }
 
 /**

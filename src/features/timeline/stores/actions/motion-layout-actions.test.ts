@@ -76,10 +76,34 @@ describe('applyMotionLayout', () => {
       .getState()
       .compositions.find((composition) => composition.id === result?.compositionId)
     expect(parent?.motionLayout?.templateId).toBe('grid-reveal')
+    expect(parent).toMatchObject({
+      assetRole: 'motion-layout',
+      libraryVisibility: 'visible',
+    })
+    for (const slot of parent?.motionLayout?.slots ?? []) {
+      expect(useCompositionsStore.getState().getComposition(slot.compositionId)).toMatchObject({
+        assetRole: 'motion-slot',
+        libraryVisibility: 'managed',
+        managedBy: {
+          kind: 'motion-layout-slot',
+          ownerCompositionId: parent?.id,
+          slotId: slot.id,
+        },
+      })
+    }
+    expect(parent?.motionLayout?.slots[0]?.adjustment).toMatchObject({
+      sourceStart: 0,
+      sourceEnd: 0.6,
+    })
     expect(parent?.items).toHaveLength(2)
     expect(parent?.items.every((item) => item.type === 'composition')).toBe(true)
     expect(
       parent?.items.every((item) => item.type !== 'composition' || item.compositionFit === 'cover'),
+    ).toBe(true)
+    expect(
+      parent?.items.every(
+        (item) => item.type !== 'composition' || (item.speed === 1 && item.sourceEnd === 180),
+      ),
     ).toBe(true)
     expect(parent?.keyframes.map((entry) => entry.itemId).sort()).toEqual(
       parent?.items.map((item) => item.id).sort(),
@@ -105,6 +129,78 @@ describe('applyMotionLayout', () => {
         .sort(),
     ).toEqual(['a', 'b'])
     expect(useCompositionsStore.getState().compositions).toHaveLength(0)
+  })
+
+  it('stores non-destructive framing and maps the selected source range onto a slot', () => {
+    const result = applyMotionLayout({
+      itemIds: ['a', 'b'],
+      chainOrder: [['a'], ['b']],
+      templateId: 'grid-reveal',
+      settings: createDefaultMotionLayoutSettings('grid-reveal'),
+      slotAdjustments: {
+        a: { scale: 1.5, offsetX: 0.4, offsetY: -0.25, sourceStart: 0.2, sourceEnd: 0.8 },
+      },
+      name: 'Motion Layout · Adjusted',
+    })
+
+    const parent = useCompositionsStore.getState().getComposition(result!.compositionId)!
+    const firstBinding = parent.motionLayout!.slots[0]!
+    const firstWrapper = parent.items.find(
+      (item) => item.type === 'composition' && item.compositionId === firstBinding.compositionId,
+    )
+
+    expect(firstBinding.adjustment).toEqual({
+      scale: 1.5,
+      offsetX: 0.4,
+      offsetY: -0.25,
+      sourceStart: 0.2,
+      sourceEnd: 0.8,
+    })
+    expect(firstWrapper).toMatchObject({
+      compositionScale: 1.5,
+      compositionOffsetX: 0.4,
+      compositionOffsetY: -0.25,
+      sourceStart: 60,
+      sourceEnd: 240,
+      sourceDuration: 300,
+      speed: 1,
+    })
+
+    updateMotionLayout({
+      compositionId: parent.id,
+      slotCompositionIds: parent.motionLayout!.slotOrder!,
+      templateId: 'grid-reveal',
+      settings: createDefaultMotionLayoutSettings('grid-reveal'),
+      slotAdjustments: {
+        [firstBinding.compositionId]: {
+          scale: 2,
+          offsetX: -0.5,
+          offsetY: 0.25,
+          sourceStart: 0.1,
+          sourceEnd: 0.7,
+        },
+      },
+      name: 'Motion Layout · Readjusted',
+    })
+
+    const updatedParent = useCompositionsStore.getState().getComposition(parent.id)!
+    const updatedBinding = updatedParent.motionLayout!.slots[0]!
+    const updatedWrapper = updatedParent.items.find(
+      (item) => item.type === 'composition' && item.compositionId === firstBinding.compositionId,
+    )
+    expect(updatedBinding.adjustment).toMatchObject({
+      scale: 2,
+      offsetX: -0.5,
+      sourceStart: 0.1,
+      sourceEnd: 0.7,
+    })
+    expect(updatedWrapper).toMatchObject({
+      compositionScale: 2,
+      compositionOffsetX: -0.5,
+      sourceStart: 30,
+      sourceEnd: 210,
+      speed: 1,
+    })
   })
 
   it('recompiles an existing layout without replacing edited slot compositions', () => {

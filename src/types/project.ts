@@ -6,6 +6,11 @@ import type { TextStylePresetId } from '@/shared/typography/text-style-preset-id
 import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 import type { TextMotionSpec } from './text-motion'
 import type { MotionLayoutInstance } from './motion-layout'
+import type {
+  CompositionAssetRole,
+  CompositionLibraryVisibility,
+  CompositionManagedBy,
+} from './composition'
 
 export interface Project {
   id: string
@@ -238,6 +243,9 @@ export interface ProjectTimeline {
     inPoint?: number
     outPoint?: number
     motionLayout?: MotionLayoutInstance
+    assetRole?: CompositionAssetRole
+    libraryVisibility?: CompositionLibraryVisibility
+    managedBy?: CompositionManagedBy
   }>
   // Keyframe animations
   keyframes?: Array<{

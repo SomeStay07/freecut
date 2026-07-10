@@ -23,7 +23,10 @@ import {
 } from '../render-span'
 import type { CanvasSettings, ItemRenderContext, ItemTransform, SubCompRenderData } from './types'
 import { log } from './shared'
-import { calculateCompositionFitLayout } from '@/shared/utils/composition-fit'
+import {
+  applyCompositionFraming,
+  calculateCompositionFitLayout,
+} from '@/shared/utils/composition-fit'
 
 /**
  * Render a CompositionItem by rendering all its sub-composition items to an
@@ -288,12 +291,21 @@ export async function renderCompositionItem(
 
     // Draw the sub-composition result into its wrapper without distorting
     // authored pixels when an aspect-preserving fit mode is requested.
-    const fitLayout = calculateCompositionFitLayout(
-      subCanvas.width,
-      subCanvas.height,
+    const fitLayout = applyCompositionFraming(
+      calculateCompositionFitLayout(
+        subCanvas.width,
+        subCanvas.height,
+        transform.width,
+        transform.height,
+        item.compositionFit ?? 'fill',
+      ),
       transform.width,
       transform.height,
-      item.compositionFit ?? 'fill',
+      {
+        scale: item.compositionScale,
+        offsetX: item.compositionOffsetX,
+        offsetY: item.compositionOffsetY,
+      },
     )
     const viewportX = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2
     const viewportY = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2

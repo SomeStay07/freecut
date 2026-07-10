@@ -3,6 +3,8 @@ export {
   useCompositionNavigationStore,
   useSequencesStore,
   useCompositionsStore,
+  useMotionLayoutDialogStore,
+  getLibraryVisibleCompositions,
   type SubComposition,
   wouldCreateCompositionCycle,
 } from './timeline-stores-contract'

@@ -4,6 +4,8 @@ import type { ItemEffect } from '@/types/effects'
 import type {
   MotionLayoutFrameAspect,
   MotionLayoutSettings,
+  MotionLayoutSlotAdjustment,
+  MotionLayoutSlotBinding,
   MotionLayoutTemplateId,
 } from '@/types/motion-layout'
 import { useItemsStore } from '../items-store'
@@ -31,6 +33,7 @@ export interface ApplyMotionLayoutInput {
   frameAspect?: MotionLayoutFrameAspect
   frameWidth?: number
   frameHeight?: number
+  slotAdjustments?: Record<string, MotionLayoutSlotAdjustment>
   name: string
 }
 
@@ -42,7 +45,61 @@ export interface UpdateMotionLayoutInput {
   frameAspect?: MotionLayoutFrameAspect
   frameWidth?: number
   frameHeight?: number
+  slotAdjustments?: Record<string, MotionLayoutSlotAdjustment>
   name: string
+}
+
+const DEFAULT_SLOT_ADJUSTMENT: MotionLayoutSlotAdjustment = {
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+  sourceStart: 0,
+  sourceEnd: 1,
+}
+
+function normalizeSlotAdjustment(
+  adjustment?: Partial<MotionLayoutSlotAdjustment>,
+  defaultSourceEnd = DEFAULT_SLOT_ADJUSTMENT.sourceEnd,
+): MotionLayoutSlotAdjustment {
+  const sourceStart = Math.max(
+    0,
+    Math.min(0.98, adjustment?.sourceStart ?? DEFAULT_SLOT_ADJUSTMENT.sourceStart),
+  )
+  const sourceEnd = Math.max(
+    sourceStart + 0.02,
+    Math.min(1, adjustment?.sourceEnd ?? defaultSourceEnd),
+  )
+  return {
+    scale: Math.max(1, Math.min(4, adjustment?.scale ?? DEFAULT_SLOT_ADJUSTMENT.scale)),
+    offsetX: Math.max(-1, Math.min(1, adjustment?.offsetX ?? DEFAULT_SLOT_ADJUSTMENT.offsetX)),
+    offsetY: Math.max(-1, Math.min(1, adjustment?.offsetY ?? DEFAULT_SLOT_ADJUSTMENT.offsetY)),
+    sourceStart,
+    sourceEnd,
+  }
+}
+
+function applySlotAdjustment(
+  wrapper: CompositionItem,
+  composition: SubComposition,
+  adjustment?: MotionLayoutSlotAdjustment,
+): CompositionItem {
+  const next = normalizeSlotAdjustment(adjustment)
+  const sourceDuration = Math.max(1, composition.durationInFrames)
+  const sourceStart = Math.min(sourceDuration - 1, Math.round(next.sourceStart * sourceDuration))
+  const sourceEnd = Math.max(
+    sourceStart + 1,
+    Math.min(sourceDuration, Math.round(next.sourceEnd * sourceDuration)),
+  )
+  return {
+    ...wrapper,
+    compositionScale: next.scale,
+    compositionOffsetX: next.offsetX,
+    compositionOffsetY: next.offsetY,
+    sourceStart,
+    sourceEnd,
+    sourceDuration,
+    speed: 1,
+  }
 }
 
 function createSlotTrack(index: number): TimelineTrack {
@@ -105,8 +162,9 @@ function buildSlotComposition(params: {
   chain: string[]
   slotTrack: TimelineTrack
   durationInFrames: number
-}): { composition: SubComposition; wrapper: CompositionItem } | null {
-  const { parent, chain, slotTrack, durationInFrames } = params
+  adjustment?: MotionLayoutSlotAdjustment
+}): BuiltSlot | null {
+  const { parent, chain, slotTrack, durationInFrames, adjustment } = params
   const chainIdSet = new Set(chain)
   for (const item of parent.items) {
     if (!chainIdSet.has(item.id) || item.type === 'audio') continue
@@ -143,20 +201,18 @@ function buildSlotComposition(params: {
     } satisfies TimelineTrack
   })
 
-  const singleVisualItem = sourceVisualItems.length === 1
   const childItems = sourceItems.map((item) => {
     const from = item.from - minFrom
-    const availableDuration = Math.max(1, durationInFrames - from)
     return {
       ...item,
       from,
-      durationInFrames:
-        singleVisualItem && item.type !== 'audio'
-          ? availableDuration
-          : Math.min(item.durationInFrames, availableDuration),
       trackId: trackIdMapping.get(item.trackId) ?? item.trackId,
     }
   })
+  const sourceDurationInFrames = Math.max(
+    durationInFrames,
+    ...childItems.map((item) => item.from + item.durationInFrames),
+  )
   const childItemIds = new Set(childItems.map((item) => item.id))
   const childTransitions = parent.transitions
     .filter(
@@ -183,45 +239,50 @@ function buildSlotComposition(params: {
     fps: parent.fps,
     width: parent.width,
     height: parent.height,
-    durationInFrames,
+    durationInFrames: sourceDurationInFrames,
     markers: [],
     inPoint: null,
     outPoint: null,
   }
-  const wrapper: CompositionItem = {
-    id: crypto.randomUUID(),
-    type: 'composition',
-    trackId: slotTrack.id,
-    from: 0,
-    durationInFrames,
-    label,
-    compositionId,
-    compositionWidth: parent.width,
-    compositionHeight: parent.height,
-    compositionFit: 'cover',
-    sourceStart: 0,
-    sourceEnd: durationInFrames,
-    sourceDuration: durationInFrames,
-    sourceFps: parent.fps,
-    speed: 1,
-    transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
-  }
+  const normalizedAdjustment = normalizeSlotAdjustment(
+    adjustment,
+    Math.min(1, durationInFrames / Math.max(1, composition.durationInFrames)),
+  )
+  const wrapper = applySlotAdjustment(
+    {
+      id: crypto.randomUUID(),
+      type: 'composition',
+      trackId: slotTrack.id,
+      from: 0,
+      durationInFrames,
+      label,
+      compositionId,
+      compositionWidth: parent.width,
+      compositionHeight: parent.height,
+      compositionFit: 'cover',
+      sourceStart: 0,
+      sourceEnd: durationInFrames,
+      sourceDuration: durationInFrames,
+      sourceFps: parent.fps,
+      speed: 1,
+      transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
+    },
+    composition,
+    normalizedAdjustment,
+  )
 
-  return { composition, wrapper }
+  return { composition, wrapper, adjustment: normalizedAdjustment }
 }
 
 interface BuiltSlot {
   composition: SubComposition
   wrapper: CompositionItem
+  adjustment: MotionLayoutSlotAdjustment
 }
 
 interface ReusableSlotSource {
   composition: SubComposition
-  binding: {
-    id: string
-    compositionId: string
-    label: string
-  }
+  binding: MotionLayoutSlotBinding
 }
 
 function cloneTimelineSourceAsSlot(params: {
@@ -350,28 +411,38 @@ function buildEditableSlot(params: {
   label: string
   slotTrack: TimelineTrack
   durationInFrames: number
+  adjustment?: MotionLayoutSlotAdjustment
 }): BuiltSlot {
-  const { parent, composition, bindingId, label, slotTrack, durationInFrames } = params
+  const { parent, composition, bindingId, label, slotTrack, durationInFrames, adjustment } = params
+  const normalizedAdjustment = normalizeSlotAdjustment(
+    adjustment,
+    Math.min(1, durationInFrames / Math.max(1, composition.durationInFrames)),
+  )
   return {
     composition,
-    wrapper: {
-      id: bindingId,
-      type: 'composition',
-      trackId: slotTrack.id,
-      from: 0,
-      durationInFrames,
-      label,
-      compositionId: composition.id,
-      compositionWidth: composition.width,
-      compositionHeight: composition.height,
-      compositionFit: 'cover',
-      sourceStart: 0,
-      sourceEnd: durationInFrames,
-      sourceDuration: durationInFrames,
-      sourceFps: parent.fps,
-      speed: 1,
-      transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
-    },
+    adjustment: normalizedAdjustment,
+    wrapper: applySlotAdjustment(
+      {
+        id: bindingId,
+        type: 'composition',
+        trackId: slotTrack.id,
+        from: 0,
+        durationInFrames,
+        label,
+        compositionId: composition.id,
+        compositionWidth: composition.width,
+        compositionHeight: composition.height,
+        compositionFit: 'cover',
+        sourceStart: 0,
+        sourceEnd: durationInFrames,
+        sourceDuration: durationInFrames,
+        sourceFps: parent.fps,
+        speed: 1,
+        transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
+      },
+      composition,
+      normalizedAdjustment,
+    ),
   }
 }
 
@@ -679,11 +750,13 @@ export function applyMotionLayout(input: ApplyMotionLayoutInput): CompositionIte
       const durationInFrames = Math.max(2, Math.round(input.settings.durationSeconds * parent.fps))
       const slotTracks = usableChains.map((_, index) => createSlotTrack(index))
       const builtSlots = usableChains.flatMap((chain, index) => {
+        const requestedSourceId = input.chainOrder[index]?.[0]
         const built = buildSlotComposition({
           parent,
           chain,
           slotTrack: slotTracks[index]!,
           durationInFrames,
+          adjustment: requestedSourceId ? input.slotAdjustments?.[requestedSourceId] : undefined,
         })
         return built ? [built] : []
       })
@@ -754,6 +827,7 @@ export function applyMotionLayout(input: ApplyMotionLayoutInput): CompositionIte
             id: slot.wrapper.id,
             compositionId: slot.composition.id,
             label: slot.wrapper.label,
+            adjustment: slot.adjustment,
           })),
         },
       }
@@ -816,12 +890,24 @@ export function updateMotionLayout(input: UpdateMotionLayoutInput): CompositionI
       )
       const newCompositionsById = new Map<string, SubComposition>()
       const timelineItemById = useItemsStore.getState().itemById
+      const durationInFrames = Math.max(2, Math.round(input.settings.durationSeconds * parent.fps))
       const requestedSourceIds = [...new Set(input.slotCompositionIds)]
       const orderedCompositionIds = requestedSourceIds.flatMap((sourceId) => {
-        if (
-          bindingsByCompositionId.has(sourceId) &&
-          Boolean(compositionsState.getComposition(sourceId))
-        ) {
+        const existingBinding = bindingsByCompositionId.get(sourceId)
+        const existingComposition = compositionsState.getComposition(sourceId)
+        if (existingBinding && existingComposition) {
+          const nextBinding = {
+            ...existingBinding,
+            adjustment: normalizeSlotAdjustment(
+              input.slotAdjustments?.[sourceId] ?? existingBinding.adjustment,
+              Math.min(1, durationInFrames / Math.max(1, existingComposition.durationInFrames)),
+            ),
+          }
+          const bindingIndex = allBindings.findIndex(
+            (binding) => binding.compositionId === sourceId,
+          )
+          if (bindingIndex >= 0) allBindings[bindingIndex] = nextBinding
+          bindingsByCompositionId.set(sourceId, nextBinding)
           return [sourceId]
         }
 
@@ -832,12 +918,13 @@ export function updateMotionLayout(input: UpdateMotionLayoutInput): CompositionI
         const cloned = cloneTimelineSourceAsSlot({
           sourceItem,
           parent,
-          minimumDurationInFrames: Math.max(
-            2,
-            Math.round(input.settings.durationSeconds * parent.fps),
-          ),
+          minimumDurationInFrames: durationInFrames,
         })
         if (!cloned) return []
+        cloned.binding.adjustment = normalizeSlotAdjustment(
+          input.slotAdjustments?.[sourceId],
+          Math.min(1, durationInFrames / Math.max(1, cloned.composition.durationInFrames)),
+        )
         allBindings.push(cloned.binding)
         bindingsByCompositionId.set(cloned.composition.id, cloned.binding)
         newCompositionsById.set(cloned.composition.id, cloned.composition)
@@ -846,7 +933,6 @@ export function updateMotionLayout(input: UpdateMotionLayoutInput): CompositionI
       const visibleCompositionIds = orderedCompositionIds.slice(0, template.maxSlots)
       if (visibleCompositionIds.length < template.minSlots) return null
 
-      const durationInFrames = Math.max(2, Math.round(input.settings.durationSeconds * parent.fps))
       const slotTracks = visibleCompositionIds.map((_, index) => createSlotTrack(index))
       const builtSlots = visibleCompositionIds.flatMap((compositionId, index) => {
         const binding = bindingsByCompositionId.get(compositionId)
@@ -862,6 +948,7 @@ export function updateMotionLayout(input: UpdateMotionLayoutInput): CompositionI
             label: binding.label || composition.name,
             slotTrack,
             durationInFrames,
+            adjustment: binding.adjustment,
           }),
         ]
       })

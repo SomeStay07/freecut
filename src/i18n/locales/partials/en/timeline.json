@@ -226,6 +226,16 @@
         "horizontal": "Horizontal",
         "vertical": "Vertical"
       },
+      "adjust": {
+        "title": "Frame content",
+        "reset": "Reset frame adjustment",
+        "dragHint": "Drag the selected frame in the preview, or fine-tune it here.",
+        "zoom": "Zoom",
+        "sourceRange": "Source range",
+        "normalSpeed": "Plays at normal speed",
+        "in": "In",
+        "out": "Out"
+      },
       "preview": {
         "play": "Play preview",
         "pause": "Pause preview",

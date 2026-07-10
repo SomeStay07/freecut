@@ -87,6 +87,7 @@ import { OrphanedClipsDialog } from './orphaned-clips-dialog'
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog'
 import { useFilteredMediaItems, useMediaLibraryStore } from '../stores/media-library-store'
 import {
+  getLibraryVisibleCompositions,
   useCompositionsStore,
   useCompositionNavigationStore,
 } from '@/features/media-library/deps/timeline-stores'
@@ -340,6 +341,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return groups
   }, [filteredMediaItems, t])
   const compositions = useCompositionsStore((s) => s.compositions)
+  const libraryCompositions = useMemo(
+    () => getLibraryVisibleCompositions(compositions),
+    [compositions],
+  )
   const MediaTypeGroupView = viewMode === 'grid' ? GridMediaTypeGroup : ListMediaTypeGroup
   const EmptyMediaGrid = viewMode === 'grid' ? GridMediaGrid : ListMediaGrid
 
@@ -366,7 +371,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
   const selectedAssetCount = selectedMediaIds.length + selectedCompositionIds.length
   const { marquee } = useMediaLibraryMarquee({
-    compositions,
+    compositions: libraryCompositions,
     filteredMediaItems,
     scrollContainerRef,
     setSelection,

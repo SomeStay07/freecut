@@ -100,6 +100,19 @@ export interface MotionLayoutSlotBinding {
   id: string
   compositionId: string
   label: string
+  adjustment?: MotionLayoutSlotAdjustment
+}
+
+/** Non-destructive framing and source-range choices for one layout slot. */
+export interface MotionLayoutSlotAdjustment {
+  /** Additional scale applied after the slot's cover fit. */
+  scale: number
+  /** Normalized pan offsets. -1 and 1 reach the available content edges. */
+  offsetX: number
+  offsetY: number
+  /** Normalized source range retained independently of layout duration. */
+  sourceStart: number
+  sourceEnd: number
 }
 
 /** Metadata retained on a generated sub-composition until it is detached. */

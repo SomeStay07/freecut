@@ -465,6 +465,9 @@ const timelineItemSchema = z
     compositionWidth: z.number().optional(),
     compositionHeight: z.number().optional(),
     compositionFit: z.enum(['fill', 'contain', 'cover']).optional(),
+    compositionScale: z.number().min(1).max(4).optional(),
+    compositionOffsetX: z.number().min(-1).max(1).optional(),
+    compositionOffsetY: z.number().min(-1).max(1).optional(),
     // Layer compositing
     blendMode: z.string().optional(),
     cornerPin: cornerPinSchema.optional(),
@@ -610,11 +613,29 @@ const compositionSchema = z
             id: z.string().min(1),
             compositionId: z.string().min(1),
             label: z.string(),
+            adjustment: z
+              .object({
+                scale: z.number().min(1).max(4),
+                offsetX: z.number().min(-1).max(1),
+                offsetY: z.number().min(-1).max(1),
+                sourceStart: z.number().min(0).max(1),
+                sourceEnd: z.number().min(0).max(1),
+              })
+              .optional(),
           }),
         ),
         slotOrder: z.array(z.string().min(1)).optional(),
       })
       .passthrough()
+      .optional(),
+    assetRole: z.enum(['compound', 'motion-layout', 'motion-slot']).optional(),
+    libraryVisibility: z.enum(['visible', 'managed']).optional(),
+    managedBy: z
+      .object({
+        kind: z.literal('motion-layout-slot'),
+        ownerCompositionId: z.string().min(1),
+        slotId: z.string().min(1),
+      })
       .optional(),
   })
   .passthrough()

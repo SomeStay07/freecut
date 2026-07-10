@@ -3,6 +3,7 @@ import { useReducedMotion } from 'motion/react'
 import { Pause, Play, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import type { MotionLayoutSlotAdjustment } from '@/types/motion-layout'
 import type { MotionLayoutPlan } from '../utils/motion-layout'
 import { resolveMotionLayoutSlot } from '../utils/motion-layout'
 
@@ -11,7 +12,10 @@ export interface MotionLayoutPreviewSlot {
   label: string
   type: string
   thumbnailUrl?: string
+  previewSrc?: string
+  sourceDurationSeconds?: number
   placeholder?: boolean
+  adjustment?: MotionLayoutSlotAdjustment
 }
 
 const SLOT_COLORS: Record<string, string> = {
@@ -42,6 +46,7 @@ export const MotionLayoutPreview = memo(function MotionLayoutPreview({
   perspectiveAmount = 0,
   selectedSlotId,
   onSelectSlot,
+  onAdjustSlot,
 }: {
   plan: MotionLayoutPlan
   slots: MotionLayoutPreviewSlot[]
@@ -52,16 +57,30 @@ export const MotionLayoutPreview = memo(function MotionLayoutPreview({
   perspectiveAmount?: number
   selectedSlotId?: string | null
   onSelectSlot?: (slotId: string) => void
+  onAdjustSlot?: (slotId: string, adjustment: MotionLayoutSlotAdjustment) => void
 }) {
   const { t } = useTranslation()
   const reduceMotion = useReducedMotion()
   const [playing, setPlaying] = useState(true)
   const elementByIdRef = useRef(new Map<string, HTMLButtonElement>())
+  const videoByIdRef = useRef(new Map<string, HTMLVideoElement>())
+  const lastVideoSeekAtRef = useRef(new Map<string, number>())
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const scrubberRef = useRef<HTMLInputElement>(null)
   const timeLabelRef = useRef<HTMLSpanElement>(null)
   const playheadRef = useRef(0)
+  const playingRef = useRef(playing)
+  const dragRef = useRef<{
+    slotId: string
+    pointerId: number
+    startX: number
+    startY: number
+    offsetX: number
+    offsetY: number
+    width: number
+    height: number
+  } | null>(null)
   const slotPlanById = useMemo(
     () => new Map(plan.slots.map((slot) => [slot.itemId, slot])),
     [plan.slots],
@@ -70,6 +89,13 @@ export const MotionLayoutPreview = memo(function MotionLayoutPreview({
   useEffect(() => {
     if (reduceMotion) setPlaying(false)
   }, [reduceMotion])
+
+  useEffect(() => {
+    playingRef.current = playing
+    if (!playing) {
+      for (const video of videoByIdRef.current.values()) video.pause()
+    }
+  }, [playing])
 
   useEffect(() => {
     const viewport = viewportRef.current
@@ -153,9 +179,39 @@ export const MotionLayoutPreview = memo(function MotionLayoutPreview({
             ),
           ),
         )
+
+        const video = videoByIdRef.current.get(slot.id)
+        if (!video || video.readyState < 1) continue
+        const fullDuration = Math.max(
+          0.01,
+          Math.min(slot.sourceDurationSeconds ?? video.duration, video.duration),
+        )
+        const sourceStart = (slot.adjustment?.sourceStart ?? 0) * fullDuration
+        const sourceEnd = (slot.adjustment?.sourceEnd ?? 1) * fullDuration
+        const sourceRange = Math.max(0.01, sourceEnd - sourceStart)
+        const progress = safeFrame / Math.max(1, plan.durationInFrames - 1)
+        const targetTime = Math.min(sourceEnd - 0.001, sourceStart + progress * sourceRange)
+        const previewDuration = plan.durationInFrames / Math.max(1, fps)
+        const playbackRate = sourceRange / Math.max(0.01, previewDuration)
+        const canPlayContinuously = playbackRate >= 0.25 && playbackRate <= 4
+
+        if (!playingRef.current || !canPlayContinuously) {
+          if (!video.paused) video.pause()
+          const now = performance.now()
+          const lastSeekAt = lastVideoSeekAtRef.current.get(slot.id) ?? 0
+          if (!playingRef.current || now - lastSeekAt >= 90) {
+            if (Math.abs(video.currentTime - targetTime) > 0.025) video.currentTime = targetTime
+            lastVideoSeekAtRef.current.set(slot.id, now)
+          }
+          continue
+        }
+
+        video.playbackRate = playbackRate
+        if (Math.abs(video.currentTime - targetTime) > 0.2) video.currentTime = targetTime
+        if (video.paused) void video.play().catch(() => undefined)
       }
     },
-    [height, perspectiveAmount, plan.durationInFrames, slotPlanById, slots, width],
+    [fps, height, perspectiveAmount, plan.durationInFrames, slotPlanById, slots, width],
   )
 
   useEffect(() => {
@@ -193,13 +249,57 @@ export const MotionLayoutPreview = memo(function MotionLayoutPreview({
               type="button"
               aria-label={slot.label}
               onClick={() => onSelectSlot?.(slot.id)}
+              onPointerDown={(event) => {
+                onSelectSlot?.(slot.id)
+                if (slot.placeholder || !onAdjustSlot) return
+                const rect = event.currentTarget.getBoundingClientRect()
+                event.currentTarget.setPointerCapture(event.pointerId)
+                dragRef.current = {
+                  slotId: slot.id,
+                  pointerId: event.pointerId,
+                  startX: event.clientX,
+                  startY: event.clientY,
+                  offsetX: slot.adjustment?.offsetX ?? 0,
+                  offsetY: slot.adjustment?.offsetY ?? 0,
+                  width: Math.max(1, rect.width),
+                  height: Math.max(1, rect.height),
+                }
+              }}
+              onPointerMove={(event) => {
+                const drag = dragRef.current
+                if (!drag || drag.slotId !== slot.id || drag.pointerId !== event.pointerId) return
+                const adjustment = slot.adjustment ?? {
+                  scale: 1,
+                  offsetX: 0,
+                  offsetY: 0,
+                  sourceStart: 0,
+                  sourceEnd: 1,
+                }
+                onAdjustSlot?.(slot.id, {
+                  ...adjustment,
+                  offsetX: Math.max(
+                    -1,
+                    Math.min(1, drag.offsetX + ((event.clientX - drag.startX) / drag.width) * 2),
+                  ),
+                  offsetY: Math.max(
+                    -1,
+                    Math.min(1, drag.offsetY + ((event.clientY - drag.startY) / drag.height) * 2),
+                  ),
+                })
+              }}
+              onPointerUp={(event) => {
+                if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
+              }}
+              onPointerCancel={() => {
+                dragRef.current = null
+              }}
               ref={(node) => {
                 if (node) elementByIdRef.current.set(slot.id, node)
                 else elementByIdRef.current.delete(slot.id)
               }}
-              className={`absolute origin-center overflow-hidden border bg-cover bg-center text-left shadow-lg outline-none transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-primary/80 focus-visible:ring-offset-2 focus-visible:ring-offset-black will-change-[left,top,width,height,transform,opacity] ${
+              className={`absolute origin-center overflow-hidden border text-left shadow-lg outline-none transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-primary/80 focus-visible:ring-offset-2 focus-visible:ring-offset-black will-change-[left,top,width,height,transform,opacity] ${
                 selectedSlotId === slot.id
-                  ? 'border-primary ring-2 ring-primary/70 ring-inset'
+                  ? 'cursor-grab border-primary ring-2 ring-primary/70 ring-inset active:cursor-grabbing'
                   : slot.placeholder
                     ? 'border-dashed border-white/25'
                     : 'border-white/15'
@@ -208,13 +308,49 @@ export const MotionLayoutPreview = memo(function MotionLayoutPreview({
                 backgroundColor: slot.placeholder
                   ? 'rgba(39, 39, 42, 0.76)'
                   : (SLOT_COLORS[slot.type] ?? '#475569'),
-                backgroundImage: slot.placeholder
-                  ? 'linear-gradient(135deg, rgba(255,255,255,.10), rgba(255,255,255,.015))'
-                  : slot.thumbnailUrl
-                    ? `linear-gradient(180deg, transparent 45%, rgba(0,0,0,.72)), url("${slot.thumbnailUrl}")`
-                    : 'linear-gradient(135deg, rgba(255,255,255,.16), rgba(255,255,255,.02))',
               }}
             >
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-cover bg-center will-change-transform"
+                style={{
+                  backgroundImage: slot.placeholder
+                    ? 'linear-gradient(135deg, rgba(255,255,255,.10), rgba(255,255,255,.015))'
+                    : slot.thumbnailUrl
+                      ? `url("${slot.thumbnailUrl}")`
+                      : 'linear-gradient(135deg, rgba(255,255,255,.16), rgba(255,255,255,.02))',
+                  backgroundPosition: `${50 - (slot.adjustment?.offsetX ?? 0) * 50}% ${50 - (slot.adjustment?.offsetY ?? 0) * 50}%`,
+                  transform: slot.placeholder ? undefined : `scale(${slot.adjustment?.scale ?? 1})`,
+                }}
+              />
+              {selectedSlotId === slot.id && slot.previewSrc ? (
+                <video
+                  key={slot.previewSrc}
+                  ref={(node) => {
+                    if (node) videoByIdRef.current.set(slot.id, node)
+                    else videoByIdRef.current.delete(slot.id)
+                  }}
+                  src={slot.previewSrc}
+                  poster={slot.thumbnailUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 h-full w-full object-cover will-change-transform"
+                  style={{
+                    objectPosition: `${50 - (slot.adjustment?.offsetX ?? 0) * 50}% ${50 - (slot.adjustment?.offsetY ?? 0) * 50}%`,
+                    transform: `scale(${slot.adjustment?.scale ?? 1})`,
+                  }}
+                  onLoadedMetadata={() => applyFrame(playheadRef.current)}
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none'
+                  }}
+                />
+              ) : null}
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent from-45% to-black/75"
+              />
               <span
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 bg-black opacity-[var(--motion-depth-dim,0)] will-change-[opacity]"

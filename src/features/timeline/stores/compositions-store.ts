@@ -4,6 +4,11 @@ import type { AudioEqSettings } from '@/types/audio'
 import type { Transition } from '@/types/transition'
 import type { ItemKeyframes } from '@/types/keyframe'
 import type { MotionLayoutInstance } from '@/types/motion-layout'
+import type {
+  CompositionAssetRole,
+  CompositionLibraryVisibility,
+  CompositionManagedBy,
+} from '@/types/composition'
 import { normalizeSubComposition } from '../utils/sub-composition-normalizer'
 
 /**
@@ -31,6 +36,73 @@ export interface SubComposition {
   outPoint?: number | null
   /** Declarative source retained while this composition is editable as a Motion Layout. */
   motionLayout?: MotionLayoutInstance
+  /** User-facing role. Optional on disk for backward compatibility. */
+  assetRole?: CompositionAssetRole
+  /** Managed assets stay out of the flat media library. */
+  libraryVisibility?: CompositionLibraryVisibility
+  /** Parent-owned lifecycle metadata for internal compositions. */
+  managedBy?: CompositionManagedBy
+}
+
+function normalizeCompositionOwnership(compositions: SubComposition[]): SubComposition[] {
+  const motionSlotOwnerByCompositionId = new Map<string, CompositionManagedBy>()
+
+  for (const composition of compositions) {
+    if (!composition.motionLayout) continue
+    for (const slot of composition.motionLayout.slots) {
+      if (motionSlotOwnerByCompositionId.has(slot.compositionId)) continue
+      motionSlotOwnerByCompositionId.set(slot.compositionId, {
+        kind: 'motion-layout-slot',
+        ownerCompositionId: composition.id,
+        slotId: slot.id,
+      })
+    }
+  }
+
+  return compositions.map((composition) => {
+    if (composition.motionLayout) {
+      return normalizeSubComposition({
+        ...composition,
+        assetRole: 'motion-layout',
+        libraryVisibility: 'visible',
+        managedBy: undefined,
+      })
+    }
+
+    const managedBy = motionSlotOwnerByCompositionId.get(composition.id)
+    if (managedBy) {
+      return normalizeSubComposition({
+        ...composition,
+        assetRole: 'motion-slot',
+        libraryVisibility: 'managed',
+        managedBy,
+      })
+    }
+
+    return normalizeSubComposition({
+      ...composition,
+      assetRole: 'compound',
+      libraryVisibility: 'visible',
+      managedBy: undefined,
+    })
+  })
+}
+
+/** Resolve the assets that belong in the user-facing media library, including legacy projects. */
+export function getLibraryVisibleCompositions(
+  compositions: readonly SubComposition[],
+): SubComposition[] {
+  const inferredManagedIds = new Set<string>()
+  for (const composition of compositions) {
+    for (const slot of composition.motionLayout?.slots ?? []) {
+      inferredManagedIds.add(slot.compositionId)
+    }
+  }
+
+  return compositions.filter(
+    (composition) =>
+      composition.libraryVisibility !== 'managed' && !inferredManagedIds.has(composition.id),
+  )
 }
 
 function buildCompositionsMediaDependencyIds(compositions: SubComposition[]): string[] {
@@ -73,26 +145,26 @@ export const useCompositionsStore = create<CompositionsState & CompositionsActio
 
     addComposition: (composition) =>
       set((state) => ({
-        compositions: [...state.compositions, normalizeSubComposition(composition)],
+        compositions: normalizeCompositionOwnership([...state.compositions, composition]),
       })),
 
     updateComposition: (id, updates) =>
       set((state) => ({
-        compositions: state.compositions.map((c) =>
-          c.id === id ? normalizeSubComposition({ ...c, ...updates }) : c,
+        compositions: normalizeCompositionOwnership(
+          state.compositions.map((c) => (c.id === id ? { ...c, ...updates } : c)),
         ),
       })),
 
     removeComposition: (id) =>
       set((state) => ({
-        compositions: state.compositions.filter((c) => c.id !== id),
+        compositions: normalizeCompositionOwnership(state.compositions.filter((c) => c.id !== id)),
       })),
 
     getComposition: (id) => get().compositionById[id],
 
     setCompositions: (compositions) =>
       set({
-        compositions: compositions.map((composition) => normalizeSubComposition(composition)),
+        compositions: normalizeCompositionOwnership(compositions),
       }),
   }),
 )

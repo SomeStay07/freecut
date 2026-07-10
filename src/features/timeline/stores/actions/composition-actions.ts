@@ -153,6 +153,48 @@ function countCompoundClipReferences(
   return items.filter((item) => isCompoundClipReference(item, targetIds)).length
 }
 
+function expandManagedCompositionDeletionTargets(
+  requestedIds: readonly string[],
+  currentSnapshot: TimelineSnapshotLike,
+): string[] {
+  const targetIds = new Set(requestedIds)
+  const compositions = useCompositionsStore.getState().compositions
+  const compositionById = new Map(compositions.map((composition) => [composition.id, composition]))
+  const managedCandidates = new Set<string>()
+
+  for (const ownerId of requestedIds) {
+    const owner = compositionById.get(ownerId)
+    for (const slot of owner?.motionLayout?.slots ?? []) {
+      managedCandidates.add(slot.compositionId)
+    }
+  }
+  for (const composition of compositions) {
+    if (composition.managedBy && targetIds.has(composition.managedBy.ownerCompositionId)) {
+      managedCandidates.add(composition.id)
+    }
+  }
+
+  const rootItems = getRootTimelineSnapshot(currentSnapshot).items
+  const effectiveCompositions = getEffectiveCompositions(currentSnapshot)
+  for (const candidateId of managedCandidates) {
+    const candidateIds = new Set([candidateId])
+    const rootReferenceCount = countCompoundClipReferences(rootItems, candidateIds)
+    const externalNestedReferenceCount = effectiveCompositions
+      .filter((composition) => !targetIds.has(composition.id))
+      .reduce(
+        (count, composition) =>
+          count + countCompoundClipReferences(composition.items, candidateIds),
+        0,
+      )
+
+    if (rootReferenceCount + externalNestedReferenceCount === 0) {
+      targetIds.add(candidateId)
+    }
+  }
+
+  return [...targetIds]
+}
+
 function sanitizeTimelineSnapshot<TSnapshot extends TimelineSnapshotLike>(
   snapshot: TSnapshot,
   targetIds: ReadonlySet<string>,
@@ -925,12 +967,14 @@ export function dissolvePreComp(compositionItemId: string): boolean {
 }
 
 export function deleteCompoundClips(compositionIds: string[]): boolean {
-  const targetIds = Array.from(new Set(compositionIds.filter(Boolean)))
-  if (targetIds.length === 0) return false
+  const requestedIds = Array.from(new Set(compositionIds.filter(Boolean)))
+  if (requestedIds.length === 0) return false
 
   return execute(
     'DELETE_COMPOUND_CLIPS',
     () => {
+      const currentSnapshot = getCurrentTimelineSnapshot()
+      const targetIds = expandManagedCompositionDeletionTargets(requestedIds, currentSnapshot)
       const targetIdSet = new Set(targetIds)
       const navState = useCompositionNavigationStore.getState()
       const deletesOpenComposition = navState.breadcrumbs.some(
@@ -942,7 +986,6 @@ export function deleteCompoundClips(compositionIds: string[]): boolean {
         useCompositionNavigationStore.getState().resetToRoot()
       }
 
-      const currentSnapshot = getCurrentTimelineSnapshot()
       const sanitizedCurrent = sanitizeTimelineSnapshot(currentSnapshot, targetIdSet)
       if (sanitizedCurrent.removedItemIds.length > 0) {
         useItemsStore.getState().setItems(sanitizedCurrent.items)
@@ -1027,7 +1070,7 @@ export function deleteCompoundClips(compositionIds: string[]): boolean {
       useTimelineSettingsStore.getState().markDirty()
       return true
     },
-    { compositionIds: targetIds },
+    { compositionIds: requestedIds },
   )
 }
 
