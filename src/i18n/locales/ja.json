@@ -40,7 +40,8 @@
       "label": "ワークスペース",
       "edit": "編集",
       "color": "カラー",
-      "animate": "アニメート"
+      "animate": "アニメート",
+      "motion": "モーション"
     },
     "backToProjects": "プロジェクトに戻る",
     "backToProjectsAria": "プロジェクトに戻る",

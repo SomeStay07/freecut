@@ -776,6 +776,7 @@ export function buildTimelineFromStores(): ProjectTimeline {
           ...(c.markers?.length && { markers: c.markers as ProjectTimeline['markers'] }),
           ...(c.inPoint != null && { inPoint: c.inPoint }),
           ...(c.outPoint != null && { outPoint: c.outPoint }),
+          ...(c.motionLayout && { motionLayout: c.motionLayout }),
         })),
       }
     })(),
@@ -1058,6 +1059,7 @@ export async function hydrateTimelineStoresFromProject(project: Project): Promis
           markers: c.markers ?? [],
           inPoint: c.inPoint ?? null,
           outPoint: c.outPoint ?? null,
+          ...(c.motionLayout && { motionLayout: c.motionLayout }),
         })),
       )
       useCompositionsStore.getState().setCompositions(hydratedCompositions)

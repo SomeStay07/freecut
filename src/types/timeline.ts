@@ -301,6 +301,8 @@ export type AdjustmentItem = BaseTimelineItem & {
   effectOpacity?: number // 0-1, defaults to 1
 }
 
+export type CompositionContentFit = 'fill' | 'contain' | 'cover'
+
 // Composition item - references a sub-composition (pre-comp)
 export type CompositionItem = BaseTimelineItem & {
   type: 'composition'
@@ -308,6 +310,8 @@ export type CompositionItem = BaseTimelineItem & {
   // Dimensions of the sub-composition canvas
   compositionWidth: number
   compositionHeight: number
+  /** How the authored canvas fits the transformed wrapper. Defaults to legacy `fill`. */
+  compositionFit?: CompositionContentFit
 }
 
 /**

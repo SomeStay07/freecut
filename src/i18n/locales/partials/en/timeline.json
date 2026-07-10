@@ -34,6 +34,205 @@
       "saveAsPreset": "Save As Preset",
       "title": "Bento layout"
     },
+    "motionLayout": {
+      "title": "Motion layout",
+      "description": "Animate {{count}} selected slots as a reusable compound clip.",
+      "inspector": "Motion settings",
+      "mediaSlots": "Media · {{count}} slots",
+      "slotLimit": "Using the first {{count}} slots",
+      "moveEarlier": "Move slot earlier",
+      "moveLater": "Move slot later",
+      "compoundHint": "Creates an editable compound clip. Source animation stays intact.",
+      "apply": "Apply motion layout",
+      "applied": "{{template}} applied",
+      "applyFailed": "Could not apply motion layout",
+      "generatedName": "Motion Layout · {{template}}",
+      "resetSettings": "Reset settings",
+      "workspace": {
+        "sources": "Sources",
+        "templates": "Templates",
+        "myLayouts": "My Layouts",
+        "projectClips": "Project clips",
+        "noSources": "Add visual clips to the timeline, then select them here.",
+        "removeSlot": "Remove slot",
+        "newLayout": "New layout",
+        "saveLayout": "Save layout",
+        "done": "Done",
+        "backToEdit": "Back to Edit",
+        "unsaved": "Unsaved",
+        "bestWith": "{{count}} slots",
+        "noLayouts": "No motion layouts yet",
+        "noLayoutsHint": "Create one from a template, then return here to edit or reuse it.",
+        "format": "Format",
+        "mediaSlots": "Media slots",
+        "slotsRequired": "{{count}} filled · {{required}} required",
+        "slotLabel": "Slot {{count}}",
+        "slotPlaceholder": "Add media to slot {{count}}",
+        "chooseClip": "Choose project clip",
+        "chooseForSlot": "Choose media for Slot {{count}}",
+        "alreadyUsed": "Already used",
+        "dropUnavailable": "That media is unavailable here or already assigned.",
+        "customize": "Customize motion",
+        "previewHint": "Choose media from a slot on the right. Placeholders preview the template rhythm.",
+        "previewReady": "Previewing {{count}} project clips",
+        "readyToCreate": "Ready to create",
+        "addMoreSlots": "Add {{count}} more clips to continue",
+        "addMoreSlots_one": "Add 1 more clip to continue",
+        "addMoreSlots_other": "Add {{count}} more clips to continue",
+        "createMotionClip": "Create Motion Clip",
+        "updateMotionClip": "Update Motion Clip",
+        "templateNeedsFewer": "Remove {{count}} assigned clips before using this template.",
+        "discardTitle": "Discard unsaved changes?",
+        "discardDescription": "Your Motion workspace changes have not been applied.",
+        "discardChanges": "Discard changes",
+        "phases": "Motion phases",
+        "intro": "Intro",
+        "hold": "Hold",
+        "outro": "Outro"
+      },
+      "categories": {
+        "grid": "Grid",
+        "spotlight": "Spotlight & focus",
+        "stack": "Stack & scatter",
+        "carousel": "Carousel & flow",
+        "reveal": "Reveal & wipe",
+        "perspective": "3D & perspective"
+      },
+      "templates": {
+        "gridReveal": {
+          "label": "Grid Reveal",
+          "description": "Tiles assemble, hold, then disperse."
+        },
+        "centerStage": {
+          "label": "Center Stage",
+          "description": "One slot at a time takes the frame."
+        },
+        "focusShift": {
+          "label": "Focus Shift",
+          "description": "A focus panel trades places with its rail."
+        },
+        "stackSlide": {
+          "label": "Stack Slide",
+          "description": "A layered deck advances with depth."
+        },
+        "positionDance": {
+          "label": "Position Dance",
+          "description": "Slots rotate through a rhythmic composition."
+        },
+        "carouselFlow": {
+          "label": "Carousel Flow",
+          "description": "A flowing belt keeps the center in focus."
+        },
+        "spotlightZoom": {
+          "label": "Spotlight Zoom",
+          "description": "Grid tiles take turns filling the frame."
+        },
+        "deckPeel": {
+          "label": "Deck Peel",
+          "description": "The front card drops away from a layered deck."
+        },
+        "zoomParallax": {
+          "label": "Zoom Parallax",
+          "description": "Slow zooms drift through layered crossfades."
+        },
+        "popGrid": {
+          "label": "Pop Grid",
+          "description": "Tiles pop in and out on offbeat cycles."
+        },
+        "tickerLoop": {
+          "label": "Ticker Loop",
+          "description": "Opposing rows move in a seamless marquee."
+        },
+        "columnDrift": {
+          "label": "Column Drift",
+          "description": "Card columns drift in alternating directions."
+        },
+        "imageTrail": {
+          "label": "Image Trail",
+          "description": "Cards pop along a sweeping arc and melt away."
+        },
+        "posterBurst": {
+          "label": "Poster Burst",
+          "description": "Posters burst forward with overlapping rhythm."
+        },
+        "diagonalWipe": {
+          "label": "Diagonal Wipe",
+          "description": "Frames enter behind a sweeping angled edge."
+        },
+        "stripeReveal": {
+          "label": "Stripe Reveal",
+          "description": "Images assemble from staggered vertical strips."
+        },
+        "splitReveal": {
+          "label": "Split Reveal",
+          "description": "Paired panels meet from opposite edges."
+        },
+        "showcaseStream": {
+          "label": "Showcase Stream",
+          "description": "Cards bend around a tilted projective ring."
+        },
+        "cardTotem": {
+          "label": "Card Totem",
+          "description": "A vertical projective strip flows through the center."
+        },
+        "filmStrip": {
+          "label": "Film Strip",
+          "description": "A curved band of cards glides across the frame."
+        },
+        "orbitCarousel": {
+          "label": "Orbit Carousel",
+          "description": "Cards orbit in layered depth with a focused front."
+        },
+        "flipGrid": {
+          "label": "Flip Grid",
+          "description": "Grid cells collapse and flip between two media sets."
+        }
+      },
+      "parameters": {
+        "duration": "Loop duration",
+        "background": "Background",
+        "pickColor": "Pick color",
+        "padding": "Padding",
+        "gap": "Gap",
+        "cornerRadius": "Corner radius",
+        "railSize": "Rail size",
+        "sideScale": "Side card scale",
+        "cardInset": "Card inset",
+        "spacing": "Spacing",
+        "easing": "Easing",
+        "direction": "Direction",
+        "backgroundDim": "Background dim",
+        "zoom": "Zoom",
+        "tilt": "Tilt",
+        "trailLength": "Trail length",
+        "staggerOverlap": "Stagger overlap",
+        "edgeAngle": "Edge angle",
+        "strips": "Strips",
+        "hold": "Hold",
+        "perspective": "Perspective",
+        "ringTilt": "Ring tilt",
+        "ringOpening": "Ring opening",
+        "ringSize": "Ring size",
+        "cardSize": "Card size",
+        "backFade": "Back fade"
+      },
+      "easing": {
+        "smooth": "Smooth",
+        "snappy": "Snappy",
+        "overshoot": "Overshoot",
+        "spring": "Spring"
+      },
+      "direction": {
+        "horizontal": "Horizontal",
+        "vertical": "Vertical"
+      },
+      "preview": {
+        "play": "Play preview",
+        "pause": "Pause preview",
+        "restart": "Restart preview",
+        "scrubber": "Preview playhead"
+      }
+    },
     "captions": {
       "addedFromTranscript": "Added From Transcript",
       "addedWithModel": "Added With Model",
@@ -57,7 +256,8 @@
       "speed": "Speed: {{speed}}x"
     },
     "contextMenu": {
-      "bentoLayout": "Bento Layout",
+      "bentoLayout": "Static Layout",
+      "motionLayout": "Motion Layout",
       "captions": "Captions",
       "clearAll": "Clear All",
       "clearKeyframes": "Clear Keyframes",

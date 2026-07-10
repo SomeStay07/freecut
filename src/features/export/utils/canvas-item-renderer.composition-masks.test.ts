@@ -121,6 +121,39 @@ describe('canvas-item-renderer composition masks', () => {
     mockFns.rotatePathMock.mockClear()
   })
 
+  it('covers a portrait composition viewport without stretching the rendered canvas', async () => {
+    const compositionItem: CompositionItem = {
+      id: 'comp-item',
+      type: 'composition',
+      compositionId: 'sub-comp-1',
+      trackId: 'track-parent',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Composition',
+      compositionWidth: 640,
+      compositionHeight: 360,
+      compositionFit: 'cover',
+    }
+    const subData: SubCompRenderData = {
+      fps: 30,
+      durationInFrames: 60,
+      sortedTracks: [],
+      keyframesMap: new Map(),
+    }
+    const { rootCtx, rctx, transform } = createCompositionMaskRenderHarness({
+      compositionItem,
+      subData,
+    })
+    transform.width = 320
+    transform.height = 360
+
+    await renderItem(rootCtx, compositionItem, transform, 0, rctx)
+
+    expect(rootCtx.rect).toHaveBeenCalledWith(480, 180, 320, 360)
+    expect(rootCtx.clip).toHaveBeenCalled()
+    expect(rootCtx.drawImage).toHaveBeenLastCalledWith(expect.anything(), 320, 180, 640, 360)
+  })
+
   it('applies active sub-comp masks only to lower tracks and does not render mask shapes as regular content', async () => {
     const subMaskItem: ShapeItem = {
       id: 'sub-mask',

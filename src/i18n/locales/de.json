@@ -40,7 +40,8 @@
       "label": "Arbeitsbereiche",
       "edit": "Schnitt",
       "color": "Farbe",
-      "animate": "Animation"
+      "animate": "Animation",
+      "motion": "Motion"
     },
     "backToProjects": "Zurück zu Projekten",
     "backToProjectsAria": "Zurück zu Projekten",

@@ -34,6 +34,197 @@
       "saveAsPreset": "Ön ayar olarak kaydet",
       "title": "Bento düzeni"
     },
+    "motionLayout": {
+      "title": "Hareketli düzen",
+      "description": "Seçili {{count}} alanı yeniden kullanılabilir bir bileşik klip olarak canlandırın.",
+      "inspector": "Hareket ayarları",
+      "mediaSlots": "Medya · {{count}} alan",
+      "slotLimit": "İlk {{count}} alan kullanılıyor",
+      "moveEarlier": "Alanı öne taşı",
+      "moveLater": "Alanı arkaya taşı",
+      "compoundHint": "Düzenlenebilir bir bileşik klip oluşturur. Kaynak animasyon korunur.",
+      "apply": "Hareketli düzeni uygula",
+      "applied": "{{template}} uygulandı",
+      "applyFailed": "Hareketli düzen uygulanamadı",
+      "generatedName": "Hareketli düzen · {{template}}",
+      "resetSettings": "Ayarları sıfırla",
+      "workspace": {
+        "sources": "Kaynaklar",
+        "templates": "Şablonlar",
+        "myLayouts": "Düzenlerim",
+        "projectClips": "Proje klipleri",
+        "noSources": "Zaman çizelgesine görsel klipler ekleyip buradan seçin.",
+        "removeSlot": "Yuvayı kaldır",
+        "newLayout": "Yeni yerleşim",
+        "saveLayout": "Yerleşimi kaydet",
+        "done": "Bitti",
+        "backToEdit": "Düzenlemeye dön",
+        "unsaved": "Kaydedilmedi",
+        "bestWith": "{{count}} yuva",
+        "noLayouts": "Henüz hareket düzeni yok",
+        "noLayoutsHint": "Bir şablondan oluşturun; düzenlemek veya yeniden kullanmak için buraya dönün.",
+        "format": "Biçim",
+        "mediaSlots": "Medya yuvaları",
+        "slotsRequired": "{{count}} dolu · {{required}} gerekli",
+        "slotLabel": "Yuva {{count}}",
+        "slotPlaceholder": "Yuva {{count}} için medya ekle",
+        "chooseClip": "Proje klibi seç",
+        "chooseForSlot": "Yuva {{count}} için medya seç",
+        "alreadyUsed": "Zaten kullanılıyor",
+        "dropUnavailable": "Bu medya burada kullanılamıyor veya zaten atanmış.",
+        "customize": "Hareketi özelleştir",
+        "previewHint": "Sağdaki bir yuvadan medya seçin. Yer tutucular şablonun ritmini önizler.",
+        "previewReady": "{{count}} proje klibi önizleniyor",
+        "readyToCreate": "Oluşturmaya hazır",
+        "addMoreSlots": "Devam etmek için {{count}} klip daha ekleyin",
+        "addMoreSlots_one": "Devam etmek için 1 klip daha ekleyin",
+        "addMoreSlots_other": "Devam etmek için {{count}} klip daha ekleyin",
+        "createMotionClip": "Hareket klibi oluştur",
+        "updateMotionClip": "Hareket klibini güncelle",
+        "templateNeedsFewer": "Bu şablonu kullanmadan önce atanmış {{count}} klibi kaldırın.",
+        "discardTitle": "Kaydedilmemiş değişiklikler silinsin mi?",
+        "discardDescription": "Hareket çalışma alanındaki değişiklikler henüz uygulanmadı.",
+        "discardChanges": "Değişiklikleri sil",
+        "phases": "Hareket aşamaları",
+        "intro": "Giriş",
+        "hold": "Beklet",
+        "outro": "Çıkış"
+      },
+      "categories": {
+        "grid": "Izgara",
+        "spotlight": "Vurgu ve odak",
+        "stack": "Yığın ve dağılım",
+        "carousel": "Döngü ve akış",
+        "reveal": "Açılım ve süpürme",
+        "perspective": "3D ve perspektif"
+      },
+      "templates": {
+        "gridReveal": {
+          "label": "Izgara açılımı",
+          "description": "Kutular birleşir, bekler ve ardından dağılır."
+        },
+        "centerStage": {
+          "label": "Merkez sahne",
+          "description": "Her seferinde bir alan çerçeveyi kaplar."
+        },
+        "focusShift": {
+          "label": "Odak değişimi",
+          "description": "Odak paneli yan şeritle yer değiştirir."
+        },
+        "stackSlide": {
+          "label": "Yığın kaydırma",
+          "description": "Katmanlı kart destesi derinlikle ilerler."
+        },
+        "positionDance": {
+          "label": "Konum dansı",
+          "description": "Alanlar ritmik bir kompozisyonda dolaşır."
+        },
+        "carouselFlow": {
+          "label": "Döngü akışı",
+          "description": "Akıcı bir şerit merkezi odakta tutar."
+        },
+        "spotlightZoom": {
+          "label": "Odak yakınlaştırma",
+          "description": "Izgara kutuları sırayla çerçeveyi doldurur."
+        },
+        "deckPeel": {
+          "label": "Desteyi soy",
+          "description": "Öndeki kart katmanlı desteden aşağı düşer."
+        },
+        "zoomParallax": {
+          "label": "Yakınlaştırma paralaksı",
+          "description": "Yavaş yakınlaştırmalar üst üste geçişlerde dolaşır."
+        },
+        "popGrid": {
+          "label": "Açılır ızgara",
+          "description": "Kutular farklı ritimlerde belirip kaybolur."
+        },
+        "tickerLoop": {
+          "label": "Kesintisiz şerit",
+          "description": "Zıt sıralar kesintisiz bir akışta hareket eder."
+        },
+        "columnDrift": {
+          "label": "Sütun sürüklenmesi",
+          "description": "Kart sütunları dönüşümlü yönlerde akar."
+        },
+        "imageTrail": {
+          "label": "Görüntü izi",
+          "description": "Kartlar bir yay boyunca belirir ve çözünür."
+        },
+        "posterBurst": {
+          "label": "Poster patlaması",
+          "description": "Posterler üst üste binen bir ritimle öne fırlar."
+        },
+        "diagonalWipe": {
+          "label": "Çapraz süpürme",
+          "description": "Çerçeveler hareketli eğik bir kenarın arkasından gelir."
+        },
+        "stripeReveal": {
+          "label": "Şeritli açılım",
+          "description": "Görüntüler gecikmeli dikey şeritlerden birleşir."
+        },
+        "splitReveal": {
+          "label": "Bölünmüş açılım",
+          "description": "İki panel karşı kenarlardan buluşur."
+        },
+        "showcaseStream": {
+          "label": "Vitrin akışı",
+          "description": "Kartlar eğimli bir perspektif halkasının çevresinde akar."
+        },
+        "cardTotem": {
+          "label": "Kart totemi",
+          "description": "Perspektifli dikey kart şeridi merkezden akar."
+        },
+        "filmStrip": {
+          "label": "Film şeridi",
+          "description": "Kavisli bir kart bandı çerçeve boyunca kayar."
+        },
+        "orbitCarousel": {
+          "label": "Yörünge döngüsü",
+          "description": "Kartlar odaklı bir ön planla derinlik katmanlarında döner."
+        },
+        "flipGrid": {
+          "label": "Dönen ızgara",
+          "description": "Izgara hücreleri iki medya grubu arasında katlanır."
+        }
+      },
+      "parameters": {
+        "duration": "Döngü süresi",
+        "background": "Arka plan",
+        "pickColor": "Renk seç",
+        "padding": "İç boşluk",
+        "gap": "Aralık",
+        "cornerRadius": "Köşe yarıçapı",
+        "railSize": "Şerit boyutu",
+        "sideScale": "Yan kart ölçeği",
+        "cardInset": "Kart iç payı",
+        "spacing": "Dağılım",
+        "easing": "Hareket eğrisi",
+        "direction": "Yön",
+        "backgroundDim": "Arka plan karartma",
+        "zoom": "Yakınlaştırma",
+        "tilt": "Eğim",
+        "trailLength": "İz uzunluğu",
+        "staggerOverlap": "Gecikme örtüşmesi",
+        "edgeAngle": "Kenar açısı",
+        "strips": "Şeritler",
+        "hold": "Bekleme",
+        "perspective": "Perspektif",
+        "ringTilt": "Halka eğimi",
+        "ringOpening": "Halka açıklığı",
+        "ringSize": "Halka boyutu",
+        "cardSize": "Kart boyutu",
+        "backFade": "Arka solma"
+      },
+      "easing": { "smooth": "Yumuşak", "snappy": "Hızlı", "overshoot": "Aşım", "spring": "Yay" },
+      "direction": { "horizontal": "Yatay", "vertical": "Dikey" },
+      "preview": {
+        "play": "Önizlemeyi oynat",
+        "pause": "Önizlemeyi duraklat",
+        "restart": "Önizlemeyi yeniden başlat",
+        "scrubber": "Önizleme oynatma başlığı"
+      }
+    },
     "captions": {
       "addedFromTranscript": "Transkriptten eklendi",
       "addedWithModel": "{{model}} ile eklendi",
@@ -57,6 +248,7 @@
       "speed": "Hız: {{speed}}x"
     },
     "contextMenu": {
+      "motionLayout": "Hareketli düzen",
       "bentoLayout": "Bento düzeni",
       "captions": "Altyazılar",
       "clearAll": "Tümünü temizle",

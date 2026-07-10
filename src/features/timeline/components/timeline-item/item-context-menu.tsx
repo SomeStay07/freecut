@@ -105,7 +105,9 @@ type MediaActionsProps = ItemContextMenuSectionProps & {
 
 type LayoutActionsProps = ItemContextMenuSectionProps & {
   selectedCount: number
+  isMotionLayoutItem?: boolean
   onBentoLayout?: () => void
+  onMotionLayout?: () => void
 }
 
 type DestructiveActionsProps = ItemContextMenuSectionProps & {
@@ -134,7 +136,9 @@ type SceneDetectionActionsConfig = Omit<
 >
 
 type LayoutActionsConfig = {
+  isMotionLayoutItem?: boolean
   onBentoLayout?: () => void
+  onMotionLayout?: () => void
 }
 
 interface ItemContextMenuProps {
@@ -306,7 +310,9 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           t={t}
           hotkeys={hotkeys}
           selectedCount={selectedCount}
+          isMotionLayoutItem={layoutActions?.isMotionLayoutItem}
           onBentoLayout={layoutActions?.onBentoLayout}
+          onMotionLayout={layoutActions?.onMotionLayout}
         />
         {mediaActions && <MediaActions t={t} hotkeys={hotkeys} {...mediaActions} />}
         {sceneDetectionActions && (
@@ -480,14 +486,29 @@ function KeyframeActions({
   )
 }
 
-function LayoutActions({ t, selectedCount, onBentoLayout }: LayoutActionsProps) {
-  if (selectedCount < 2 || !onBentoLayout) return null
+function LayoutActions({
+  t,
+  selectedCount,
+  isMotionLayoutItem,
+  onBentoLayout,
+  onMotionLayout,
+}: LayoutActionsProps) {
+  const canCreateLayout = selectedCount >= 2
+  const canOpenMotionLayout = Boolean(onMotionLayout && (canCreateLayout || isMotionLayoutItem))
+  if (!canOpenMotionLayout && (!canCreateLayout || !onBentoLayout)) return null
 
   return (
     <>
-      <ContextMenuItem onClick={onBentoLayout}>
-        {t('timeline.contextMenu.bentoLayout')}
-      </ContextMenuItem>
+      {canOpenMotionLayout ? (
+        <ContextMenuItem onClick={onMotionLayout}>
+          {t('timeline.contextMenu.motionLayout')}
+        </ContextMenuItem>
+      ) : null}
+      {canCreateLayout && onBentoLayout ? (
+        <ContextMenuItem onClick={onBentoLayout}>
+          {t('timeline.contextMenu.bentoLayout')}
+        </ContextMenuItem>
+      ) : null}
       <ContextMenuSeparator />
     </>
   )

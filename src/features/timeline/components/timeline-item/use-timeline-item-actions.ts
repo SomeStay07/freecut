@@ -6,6 +6,7 @@ import type { AnimatableProperty } from '@/types/keyframe'
 import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage'
 import { useSelectionStore } from '@/shared/state/selection'
 import { usePlaybackStore } from '@/shared/state/playback'
+import { useEditorStore } from '@/shared/state/editor'
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog'
 import { useTtsGenerateDialogStore } from '@/shared/state/tts-generate-dialog'
 import { getTextItemPlainText } from '@/shared/utils/text-item-spans'
@@ -21,6 +22,7 @@ import {
 } from '@/features/timeline/deps/media-transcription-service'
 import { useTimelineStore } from '../../stores/timeline-store'
 import { useItemsStore } from '../../stores/items-store'
+import { useCompositionsStore } from '../../stores/compositions-store'
 import {
   insertFreezeFrame,
   linkItems,
@@ -48,6 +50,7 @@ import {
 } from '../../deps/analysis'
 import { resolveMediaUrl } from '../../deps/media-library-resolver'
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store'
+import { useMotionLayoutDialogStore } from '../motion-layout-dialog-store'
 import { createLogger } from '@/shared/logging/logger'
 import { saveScenes } from '@/infrastructure/storage/workspace-fs/scenes'
 import {
@@ -75,6 +78,10 @@ export function useTimelineItemActions({
   rightNeighbor,
   segmentOverlays,
 }: UseTimelineItemActionsParams) {
+  const compositionId = item.compositionId
+  const isMotionLayoutItem = useCompositionsStore((state) =>
+    compositionId ? Boolean(state.compositionById[compositionId]?.motionLayout) : false,
+  )
   const getCanJoinSelected = useCallback(() => {
     const selectedItemIds = useSelectionStore.getState().selectedItemIds
     if (selectedItemIds.length < 2) {
@@ -180,6 +187,18 @@ export function useTimelineItemActions({
     }
     useBentoLayoutDialogStore.getState().open(selectedItemIds)
   }, [])
+
+  const handleMotionLayout = useCallback(() => {
+    if (compositionId && isMotionLayoutItem) {
+      useMotionLayoutDialogStore.getState().openExisting(compositionId)
+      useEditorStore.getState().setWorkspace('motion')
+      return
+    }
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds
+    if (selectedItemIds.length < 2) return
+    useMotionLayoutDialogStore.getState().open(selectedItemIds)
+    useEditorStore.getState().setWorkspace('motion')
+  }, [compositionId, isMotionLayoutItem])
 
   const handleFreezeFrame = useCallback(() => {
     if (item.type !== 'video') {
@@ -319,7 +338,6 @@ export function useTimelineItemActions({
     createPreComp(undefined, ids)
   }, [])
 
-  const compositionId = item.compositionId
   const itemLabel = item.label
   const handleEnterComposition = useCallback(() => {
     if (!isCompositionItem || !compositionId) {
@@ -575,6 +593,7 @@ export function useTimelineItemActions({
     isSceneDetectionActive,
     isRemovingFillers,
     isCompositionItem,
+    isMotionLayoutItem,
     handleJoinSelected,
     handleJoinLeft,
     handleJoinRight,
@@ -586,6 +605,7 @@ export function useTimelineItemActions({
     handleClearAllKeyframes,
     handleClearPropertyKeyframes,
     handleBentoLayout,
+    handleMotionLayout,
     handleFreezeFrame,
     handleGenerateAudioFromText,
     handleCaptionsFromDialog,

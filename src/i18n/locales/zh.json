@@ -40,7 +40,8 @@
       "label": "工作区",
       "edit": "剪辑",
       "color": "调色",
-      "animate": "动画"
+      "animate": "动画",
+      "motion": "动态"
     },
     "backToProjects": "返回项目",
     "backToProjectsAria": "返回项目",

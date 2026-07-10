@@ -40,7 +40,8 @@
       "label": "작업 영역",
       "edit": "편집",
       "color": "컬러",
-      "animate": "애니메이트"
+      "animate": "애니메이트",
+      "motion": "모션"
     },
     "backToProjects": "프로젝트로 돌아가기",
     "backToProjectsAria": "프로젝트로 돌아가기",

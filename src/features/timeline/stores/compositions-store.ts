@@ -3,6 +3,7 @@ import type { TimelineItem, TimelineTrack, ProjectMarker } from '@/types/timelin
 import type { AudioEqSettings } from '@/types/audio'
 import type { Transition } from '@/types/transition'
 import type { ItemKeyframes } from '@/types/keyframe'
+import type { MotionLayoutInstance } from '@/types/motion-layout'
 import { normalizeSubComposition } from '../utils/sub-composition-normalizer'
 
 /**
@@ -28,6 +29,8 @@ export interface SubComposition {
   /** Per-sequence in/out playback range. */
   inPoint?: number | null
   outPoint?: number | null
+  /** Declarative source retained while this composition is editable as a Motion Layout. */
+  motionLayout?: MotionLayoutInstance
 }
 
 function buildCompositionsMediaDependencyIds(compositions: SubComposition[]): string[] {

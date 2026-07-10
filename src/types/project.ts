@@ -5,6 +5,7 @@ import type { CropSettings } from './transform'
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids'
 import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 import type { TextMotionSpec } from './text-motion'
+import type { MotionLayoutInstance } from './motion-layout'
 
 export interface Project {
   id: string
@@ -121,6 +122,7 @@ export interface ProjectTimeline {
       compositionId?: string // Reference to a sub-composition
       compositionWidth?: number
       compositionHeight?: number
+      compositionFit?: 'fill' | 'contain' | 'cover'
       // Source dimensions (for video/image items)
       sourceWidth?: number
       sourceHeight?: number
@@ -235,6 +237,7 @@ export interface ProjectTimeline {
     markers?: ProjectTimeline['markers']
     inPoint?: number
     outPoint?: number
+    motionLayout?: MotionLayoutInstance
   }>
   // Keyframe animations
   keyframes?: Array<{

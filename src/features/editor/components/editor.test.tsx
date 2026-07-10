@@ -107,10 +107,16 @@ vi.mock('./audio-meter-panel', () => ({
 vi.mock('@/features/editor/deps/timeline-ui', () => ({
   Timeline: () => <div data-testid="timeline" />,
   importBentoLayoutDialog: vi.fn().mockResolvedValue({ BentoLayoutDialog: () => null }),
+  importMotionLayoutDialog: vi.fn().mockResolvedValue({
+    default: () => null,
+    MotionLayoutWorkspace: () => <div data-testid="motion-layout-workspace" />,
+  }),
   importFillerRemovalDialog: vi.fn().mockResolvedValue({ FillerRemovalDialog: () => null }),
   importReverseConformDialog: vi.fn().mockResolvedValue({ ReverseConformDialog: () => null }),
   importSilenceRemovalDialog: vi.fn().mockResolvedValue({ SilenceRemovalDialog: () => null }),
   useBentoLayoutDialogStore: (selector: (state: { isOpen: boolean }) => unknown) =>
+    selector({ isOpen: false }),
+  useMotionLayoutDialogStore: (selector: (state: { isOpen: boolean }) => unknown) =>
     selector({ isOpen: false }),
   useFillerRemovalDialogStore: (selector: (state: { isOpen: boolean }) => unknown) =>
     selector({ isOpen: false }),
@@ -442,6 +448,33 @@ describe('LoadedEditor migration metadata refresh', () => {
     expect(await screen.findByTestId('color-grading-dock')).toBeInTheDocument()
     expect(screen.getByTestId('color-timeline-navigator')).toBeInTheDocument()
     expect(screen.queryByTestId('timeline')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('properties-sidebar')).not.toBeInTheDocument()
+  })
+
+  it('mounts Motion Layout as a first-class workspace without the edit timeline', async () => {
+    mocks.editorState.workspace = 'motion'
+
+    render(
+      <LoadedEditor
+        projectId="project-1"
+        project={{
+          id: 'project-1',
+          name: 'Motion Project',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+        }}
+        migration={{
+          storedSchemaVersion: 9,
+          currentSchemaVersion: 9,
+          requiresUpgrade: false,
+        }}
+      />,
+    )
+
+    expect(await screen.findByTestId('motion-layout-workspace')).toBeInTheDocument()
+    expect(screen.queryByTestId('timeline')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('media-sidebar')).not.toBeInTheDocument()
     expect(screen.queryByTestId('properties-sidebar')).not.toBeInTheDocument()
   })
 })

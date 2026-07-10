@@ -5,7 +5,7 @@ const page = {
   slug: 'editing-tools',
   title: 'Editing Tools',
   description:
-    'Selection, razor, trim, slip, slide, rate stretch, and the ripple and rolling trim behaviors.',
+    'Selection, razor, trim, slip, slide, rate stretch, layouts, and the ripple and rolling trim behaviors.',
   category: 'Core Editing',
   related: ['timeline', 'keyboard-shortcuts', 'properties'],
   sections: [
@@ -66,7 +66,10 @@ const page = {
           items: [
             'Insert a **freeze frame** at the playhead with `Shift+F` to hold a single frame.',
             'Group a run of clips into a **compound clip** to reuse or simplify a busy section, or open it as a **sequence** tab to edit it as a standalone timeline.',
-            'Use the **Bento layout** dialog to arrange selected visual clips into a structured grid.',
+            'Use **Static Layout** to arrange selected visual clips into a structured grid without adding motion.',
+            'Use **Motion Layout** to turn selected clips into an animated, reusable compound clip. Choose from 22 grid, spotlight, stack, carousel, reveal, and projective templates; reorder media slots; preview the loop; and tune duration, spacing, easing, and template-specific controls before applying it.',
+            'Motion Layout keeps each source clip and its animation inside an isolated slot composition. Generated template keyframes animate the slot wrappers, so existing source keyframes stay intact.',
+            'Reveal templates generate editable crop or shape-mask actors, while projective templates use the existing corner-pin renderer for visible perspective deformation.',
           ],
         },
       ],

@@ -464,6 +464,7 @@ const timelineItemSchema = z
     // Composition item fields
     compositionWidth: z.number().optional(),
     compositionHeight: z.number().optional(),
+    compositionFit: z.enum(['fill', 'contain', 'cover']).optional(),
     // Layer compositing
     blendMode: z.string().optional(),
     cornerPin: cornerPinSchema.optional(),
@@ -547,6 +548,74 @@ const compositionSchema = z
     markers: z.array(markerSchema).optional(),
     inPoint: z.number().int().min(0).optional(),
     outPoint: z.number().int().min(0).optional(),
+    motionLayout: z
+      .object({
+        templateId: z.enum([
+          'grid-reveal',
+          'center-stage',
+          'focus-shift',
+          'stack-slide',
+          'position-dance',
+          'carousel-flow',
+          'spotlight-zoom',
+          'deck-peel',
+          'zoom-parallax',
+          'pop-grid',
+          'ticker-loop',
+          'column-drift',
+          'image-trail',
+          'poster-burst',
+          'diagonal-wipe',
+          'stripe-reveal',
+          'split-reveal',
+          'showcase-stream',
+          'card-totem',
+          'film-strip',
+          'orbit-carousel',
+          'flip-grid',
+        ]),
+        templateVersion: z.number().int().min(1),
+        frameAspect: z.enum(['16:9', '4:3', '1:1', '4:5', '9:16']).optional(),
+        settings: z
+          .object({
+            durationSeconds: z.number().min(0.1),
+            backgroundColor: z.string(),
+            padding: z.number(),
+            gap: z.number(),
+            cornerRadius: z.number(),
+            easing: z.enum(['smooth', 'snappy', 'overshoot', 'spring']),
+            direction: z.enum(['horizontal', 'vertical']),
+            railSize: z.number(),
+            sideScale: z.number(),
+            cardInset: z.number(),
+            spacing: z.number(),
+            backgroundDim: z.number(),
+            zoom: z.number(),
+            tilt: z.number(),
+            trailLength: z.number(),
+            staggerOverlap: z.number(),
+            edgeAngle: z.number(),
+            strips: z.number(),
+            hold: z.number(),
+            perspective: z.number(),
+            ringTilt: z.number(),
+            ringOpening: z.number(),
+            ringSize: z.number(),
+            cardSize: z.number(),
+            backFade: z.number(),
+          })
+          .passthrough(),
+        slots: z.array(
+          z.object({
+            id: z.string().min(1),
+            compositionId: z.string().min(1),
+            label: z.string(),
+          }),
+        ),
+        slotOrder: z.array(z.string().min(1)).optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough()
 

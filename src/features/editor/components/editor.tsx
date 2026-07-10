@@ -18,6 +18,7 @@ import { AudioMeterPanel } from './audio-meter-panel'
 import {
   Timeline,
   importBentoLayoutDialog,
+  importMotionLayoutDialog,
   importFillerRemovalDialog,
   importReverseConformDialog,
   importSilenceRemovalDialog,
@@ -135,6 +136,11 @@ const LazySubtitleScanProgressDialog = lazy(() =>
 const LazyBentoLayoutDialog = lazy(() =>
   importBentoLayoutDialog().then((module) => ({
     default: module.BentoLayoutDialog,
+  })),
+)
+const LazyMotionLayoutWorkspace = lazy(() =>
+  importMotionLayoutDialog().then((module) => ({
+    default: module.MotionLayoutWorkspace,
   })),
 )
 const LazyReverseConformDialog = lazy(() =>
@@ -652,9 +658,10 @@ export const LoadedEditor = memo(function LoadedEditor({
   const timelineDuration = 30
   const isColorWorkspace = workspace === 'color'
   const isAnimateWorkspace = workspace === 'animate'
+  const isMotionWorkspace = workspace === 'motion'
   // Both the Color and Animate workspaces replace the default split layout and
   // hide the inline media/properties sidebars.
-  const hidesDefaultSidebars = isColorWorkspace || isAnimateWorkspace
+  const hidesDefaultSidebars = isColorWorkspace || isAnimateWorkspace || isMotionWorkspace
 
   return (
     <div
@@ -689,7 +696,11 @@ export const LoadedEditor = memo(function LoadedEditor({
         )}
 
         {/* Right side: Preview/Properties + Timeline */}
-        {isAnimateWorkspace ? (
+        {isMotionWorkspace ? (
+          <Suspense fallback={null}>
+            <LazyMotionLayoutWorkspace />
+          </Suspense>
+        ) : isAnimateWorkspace ? (
           <AnimateLayout project={project} />
         ) : isColorWorkspace ? (
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

@@ -637,6 +637,7 @@ export const TimelineItem = memo(function TimelineItem({
     hasSpeakableText,
     isSceneDetectionActive,
     isCompositionItem,
+    isMotionLayoutItem,
     handleJoinSelected,
     handleJoinLeft,
     handleJoinRight,
@@ -648,6 +649,7 @@ export const TimelineItem = memo(function TimelineItem({
     handleClearAllKeyframes,
     handleClearPropertyKeyframes,
     handleBentoLayout,
+    handleMotionLayout,
     handleFreezeFrame,
     handleGenerateAudioFromText,
     handleCaptionsFromDialog,
@@ -862,7 +864,9 @@ export const TimelineItem = memo(function TimelineItem({
           onClearPropertyKeyframes: handleClearPropertyKeyframes,
         }}
         layoutActions={{
+          isMotionLayoutItem,
           onBentoLayout: handleBentoLayout,
+          onMotionLayout: handleMotionLayout,
         }}
         mediaActions={{
           canReverse: item.type === 'video' || item.type === 'audio',

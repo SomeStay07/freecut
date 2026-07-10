@@ -40,7 +40,8 @@
       "label": "Çalışma alanları",
       "edit": "Kurgu",
       "color": "Renk",
-      "animate": "Animasyon"
+      "animate": "Animasyon",
+      "motion": "Hareket"
     },
     "backToProjects": "Projelere Dön",
     "backToProjectsAria": "Projelere dön",

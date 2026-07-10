@@ -4,6 +4,7 @@ import { DEFAULT_TRACK_HEIGHT } from '../constants'
 type CompositionLike = {
   items: TimelineItem[]
   tracks: TimelineTrack[]
+  motionLayout?: unknown
 }
 
 function compareTracksByOrder(a: TimelineTrack, b: TimelineTrack): number {
@@ -63,8 +64,17 @@ export function hydrateTracksFromItems(
 export function normalizeSubComposition<TComposition extends CompositionLike>(
   composition: TComposition,
 ): TComposition {
+  const items = composition.motionLayout
+    ? composition.items.map((item) =>
+        item.type === 'composition' && item.compositionFit === undefined
+          ? { ...item, compositionFit: 'cover' as const }
+          : item,
+      )
+    : composition.items
+
   return {
     ...composition,
-    tracks: hydrateTracksFromItems(composition.items, composition.tracks),
+    items,
+    tracks: hydrateTracksFromItems(items, composition.tracks),
   }
 }

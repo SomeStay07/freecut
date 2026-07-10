@@ -34,6 +34,205 @@
       "saveAsPreset": "Guardar como Preajuste",
       "title": "Diseño bento"
     },
+    "motionLayout": {
+      "title": "Diseño animado",
+      "description": "Anima {{count}} espacios seleccionados como un clip compuesto reutilizable.",
+      "inspector": "Ajustes de movimiento",
+      "mediaSlots": "Medios · {{count}} espacios",
+      "slotLimit": "Se usarán los primeros {{count}} espacios",
+      "moveEarlier": "Mover espacio hacia delante",
+      "moveLater": "Mover espacio hacia atrás",
+      "compoundHint": "Crea un clip compuesto editable. La animación original se conserva.",
+      "apply": "Aplicar diseño animado",
+      "applied": "Se aplicó {{template}}",
+      "applyFailed": "No se pudo aplicar el diseño animado",
+      "generatedName": "Diseño animado · {{template}}",
+      "resetSettings": "Restablecer ajustes",
+      "workspace": {
+        "sources": "Fuentes",
+        "templates": "Plantillas",
+        "myLayouts": "Mis diseños",
+        "projectClips": "Clips del proyecto",
+        "noSources": "Añade clips visuales a la línea de tiempo y selecciónalos aquí.",
+        "removeSlot": "Quitar espacio",
+        "newLayout": "Nuevo diseño",
+        "saveLayout": "Guardar diseño",
+        "done": "Listo",
+        "backToEdit": "Volver a Editar",
+        "unsaved": "Sin guardar",
+        "bestWith": "{{count}} espacios",
+        "noLayouts": "Aún no hay diseños de movimiento",
+        "noLayoutsHint": "Crea uno desde una plantilla y vuelve aquí para editarlo o reutilizarlo.",
+        "format": "Formato",
+        "mediaSlots": "Espacios multimedia",
+        "slotsRequired": "{{count}} completos · {{required}} necesarios",
+        "slotLabel": "Espacio {{count}}",
+        "slotPlaceholder": "Añadir contenido al espacio {{count}}",
+        "chooseClip": "Elegir clip del proyecto",
+        "chooseForSlot": "Elegir contenido para el espacio {{count}}",
+        "alreadyUsed": "Ya está en uso",
+        "dropUnavailable": "Ese contenido no está disponible aquí o ya está asignado.",
+        "customize": "Personalizar movimiento",
+        "previewHint": "Elige contenido desde un espacio a la derecha. Los marcadores muestran el ritmo de la plantilla.",
+        "previewReady": "Vista previa de {{count}} clips del proyecto",
+        "readyToCreate": "Listo para crear",
+        "addMoreSlots": "Añade {{count}} clips más para continuar",
+        "addMoreSlots_one": "Añade 1 clip más para continuar",
+        "addMoreSlots_other": "Añade {{count}} clips más para continuar",
+        "createMotionClip": "Crear clip de movimiento",
+        "updateMotionClip": "Actualizar clip de movimiento",
+        "templateNeedsFewer": "Quita {{count}} clips asignados antes de usar esta plantilla.",
+        "discardTitle": "¿Descartar los cambios sin guardar?",
+        "discardDescription": "Los cambios del espacio de movimiento aún no se han aplicado.",
+        "discardChanges": "Descartar cambios",
+        "phases": "Fases de movimiento",
+        "intro": "Entrada",
+        "hold": "Pausa",
+        "outro": "Salida"
+      },
+      "categories": {
+        "grid": "Cuadrícula",
+        "spotlight": "Protagonismo y enfoque",
+        "stack": "Pila y dispersión",
+        "carousel": "Carrusel y flujo",
+        "reveal": "Aparición y barrido",
+        "perspective": "3D y perspectiva"
+      },
+      "templates": {
+        "gridReveal": {
+          "label": "Aparición en cuadrícula",
+          "description": "Los mosaicos se montan, se mantienen y se dispersan."
+        },
+        "centerStage": {
+          "label": "Escenario central",
+          "description": "Un espacio ocupa todo el encuadre cada vez."
+        },
+        "focusShift": {
+          "label": "Cambio de enfoque",
+          "description": "El panel principal intercambia su lugar con la tira lateral."
+        },
+        "stackSlide": {
+          "label": "Deslizamiento apilado",
+          "description": "Una baraja en capas avanza con profundidad."
+        },
+        "positionDance": {
+          "label": "Danza de posiciones",
+          "description": "Los espacios rotan por una composición rítmica."
+        },
+        "carouselFlow": {
+          "label": "Flujo de carrusel",
+          "description": "Una cinta fluida mantiene el centro enfocado."
+        },
+        "spotlightZoom": {
+          "label": "Zoom protagonista",
+          "description": "Los mosaicos se turnan para llenar el encuadre."
+        },
+        "deckPeel": {
+          "label": "Desprender baraja",
+          "description": "La tarjeta frontal cae desde una baraja en capas."
+        },
+        "zoomParallax": {
+          "label": "Zoom con paralaje",
+          "description": "Zooms lentos recorren fundidos superpuestos."
+        },
+        "popGrid": {
+          "label": "Cuadrícula emergente",
+          "description": "Los mosaicos aparecen y desaparecen en ciclos desfasados."
+        },
+        "tickerLoop": {
+          "label": "Bucle de cinta",
+          "description": "Filas opuestas se mueven en una marquesina continua."
+        },
+        "columnDrift": {
+          "label": "Deriva de columnas",
+          "description": "Las columnas de tarjetas se desplazan en direcciones alternas."
+        },
+        "imageTrail": {
+          "label": "Rastro de imágenes",
+          "description": "Las tarjetas aparecen sobre un arco y se desvanecen."
+        },
+        "posterBurst": {
+          "label": "Explosión de carteles",
+          "description": "Los carteles avanzan con un ritmo superpuesto."
+        },
+        "diagonalWipe": {
+          "label": "Barrido diagonal",
+          "description": "Los encuadres entran tras un borde inclinado en movimiento."
+        },
+        "stripeReveal": {
+          "label": "Aparición por franjas",
+          "description": "Las imágenes se montan con franjas verticales escalonadas."
+        },
+        "splitReveal": {
+          "label": "Aparición dividida",
+          "description": "Dos paneles se encuentran desde lados opuestos."
+        },
+        "showcaseStream": {
+          "label": "Secuencia de escaparate",
+          "description": "Las tarjetas recorren un anillo inclinado con perspectiva."
+        },
+        "cardTotem": {
+          "label": "Tótem de tarjetas",
+          "description": "Una tira vertical con perspectiva fluye por el centro."
+        },
+        "filmStrip": {
+          "label": "Tira de película",
+          "description": "Una banda curva de tarjetas se desliza por el encuadre."
+        },
+        "orbitCarousel": {
+          "label": "Carrusel orbital",
+          "description": "Las tarjetas orbitan en capas de profundidad con un frente enfocado."
+        },
+        "flipGrid": {
+          "label": "Cuadrícula giratoria",
+          "description": "Las celdas se pliegan entre dos grupos de medios."
+        }
+      },
+      "parameters": {
+        "duration": "Duración del bucle",
+        "background": "Fondo",
+        "pickColor": "Elegir color",
+        "padding": "Margen interior",
+        "gap": "Separación",
+        "cornerRadius": "Radio de esquina",
+        "railSize": "Tamaño de la tira",
+        "sideScale": "Escala de tarjetas laterales",
+        "cardInset": "Margen de tarjeta",
+        "spacing": "Espaciado",
+        "easing": "Aceleración",
+        "direction": "Dirección",
+        "backgroundDim": "Oscurecer fondo",
+        "zoom": "Zoom",
+        "tilt": "Inclinación",
+        "trailLength": "Longitud del rastro",
+        "staggerOverlap": "Solapamiento escalonado",
+        "edgeAngle": "Ángulo del borde",
+        "strips": "Franjas",
+        "hold": "Pausa",
+        "perspective": "Perspectiva",
+        "ringTilt": "Inclinación del anillo",
+        "ringOpening": "Apertura del anillo",
+        "ringSize": "Tamaño del anillo",
+        "cardSize": "Tamaño de tarjeta",
+        "backFade": "Atenuación trasera"
+      },
+      "easing": {
+        "smooth": "Suave",
+        "snappy": "Ágil",
+        "overshoot": "Sobrepaso",
+        "spring": "Resorte"
+      },
+      "direction": {
+        "horizontal": "Horizontal",
+        "vertical": "Vertical"
+      },
+      "preview": {
+        "play": "Reproducir vista previa",
+        "pause": "Pausar vista previa",
+        "restart": "Reiniciar vista previa",
+        "scrubber": "Cabezal de vista previa"
+      }
+    },
     "captions": {
       "addedFromTranscript": "Agregado desde transcripcion",
       "addedWithModel": "Agregado con modelo",
@@ -57,7 +256,8 @@
       "speed": "Velocidad: {{speed}}x"
     },
     "contextMenu": {
-      "bentoLayout": "Bento Diseno",
+      "bentoLayout": "Diseño estático",
+      "motionLayout": "Diseño animado",
       "captions": "Subtitulos",
       "clearAll": "Limpiar todo",
       "clearKeyframes": "Limpiar fotogramas clave",

@@ -34,6 +34,202 @@
       "saveAsPreset": "Salvar como predefinicao",
       "title": "Layout bento"
     },
+    "motionLayout": {
+      "title": "Layout animado",
+      "description": "Anime {{count}} espaços selecionados como um clipe composto reutilizável.",
+      "inspector": "Configurações de movimento",
+      "mediaSlots": "Mídia · {{count}} espaços",
+      "slotLimit": "Usando os primeiros {{count}} espaços",
+      "moveEarlier": "Mover espaço para antes",
+      "moveLater": "Mover espaço para depois",
+      "compoundHint": "Cria um clipe composto editável. A animação original permanece intacta.",
+      "apply": "Aplicar layout animado",
+      "applied": "{{template}} aplicado",
+      "applyFailed": "Não foi possível aplicar o layout animado",
+      "generatedName": "Layout animado · {{template}}",
+      "resetSettings": "Redefinir configurações",
+      "workspace": {
+        "sources": "Fontes",
+        "templates": "Modelos",
+        "myLayouts": "Meus layouts",
+        "projectClips": "Clipes do projeto",
+        "noSources": "Adicione clipes visuais à linha do tempo e selecione-os aqui.",
+        "removeSlot": "Remover espaço",
+        "newLayout": "Novo layout",
+        "saveLayout": "Salvar layout",
+        "done": "Concluído",
+        "backToEdit": "Voltar à edição",
+        "unsaved": "Não salvo",
+        "bestWith": "{{count}} espaços",
+        "noLayouts": "Nenhum layout de movimento ainda",
+        "noLayoutsHint": "Crie um a partir de um modelo e volte aqui para editar ou reutilizar.",
+        "format": "Formato",
+        "mediaSlots": "Espaços de mídia",
+        "slotsRequired": "{{count}} preenchidos · {{required}} obrigatórios",
+        "slotLabel": "Espaço {{count}}",
+        "slotPlaceholder": "Adicionar mídia ao espaço {{count}}",
+        "chooseClip": "Escolher clipe do projeto",
+        "chooseForSlot": "Escolher mídia para o espaço {{count}}",
+        "alreadyUsed": "Já utilizado",
+        "dropUnavailable": "Essa mídia não está disponível aqui ou já foi atribuída.",
+        "customize": "Personalizar movimento",
+        "previewHint": "Escolha a mídia em um espaço à direita. Os espaços vazios mostram o ritmo do modelo.",
+        "previewReady": "Visualizando {{count}} clipes do projeto",
+        "readyToCreate": "Pronto para criar",
+        "addMoreSlots": "Adicione mais {{count}} clipes para continuar",
+        "addMoreSlots_one": "Adicione mais 1 clipe para continuar",
+        "addMoreSlots_other": "Adicione mais {{count}} clipes para continuar",
+        "createMotionClip": "Criar clipe de movimento",
+        "updateMotionClip": "Atualizar clipe de movimento",
+        "templateNeedsFewer": "Remova {{count}} clipes atribuídos antes de usar este modelo.",
+        "discardTitle": "Descartar alterações não salvas?",
+        "discardDescription": "As alterações no espaço de Movimento ainda não foram aplicadas.",
+        "discardChanges": "Descartar alterações",
+        "phases": "Fases do movimento",
+        "intro": "Entrada",
+        "hold": "Pausa",
+        "outro": "Saída"
+      },
+      "categories": {
+        "grid": "Grade",
+        "spotlight": "Destaque e foco",
+        "stack": "Pilha e dispersão",
+        "carousel": "Carrossel e fluxo",
+        "reveal": "Revelação e varredura",
+        "perspective": "3D e perspectiva"
+      },
+      "templates": {
+        "gridReveal": {
+          "label": "Revelação em grade",
+          "description": "Os blocos se montam, permanecem e depois se dispersam."
+        },
+        "centerStage": {
+          "label": "Palco central",
+          "description": "Um espaço por vez ocupa o quadro."
+        },
+        "focusShift": {
+          "label": "Troca de foco",
+          "description": "O painel de foco troca de lugar com a faixa lateral."
+        },
+        "stackSlide": {
+          "label": "Pilha deslizante",
+          "description": "Um baralho em camadas avança com profundidade."
+        },
+        "positionDance": {
+          "label": "Dança de posições",
+          "description": "Os espaços circulam por uma composição rítmica."
+        },
+        "carouselFlow": {
+          "label": "Fluxo de carrossel",
+          "description": "Uma faixa fluida mantém o centro em foco."
+        },
+        "spotlightZoom": {
+          "label": "Zoom em destaque",
+          "description": "Os blocos se revezam preenchendo o quadro."
+        },
+        "deckPeel": {
+          "label": "Desfolhar baralho",
+          "description": "O cartão da frente cai de um baralho em camadas."
+        },
+        "zoomParallax": {
+          "label": "Zoom com paralaxe",
+          "description": "Zooms lentos percorrem transições sobrepostas."
+        },
+        "popGrid": {
+          "label": "Grade pop",
+          "description": "Os blocos aparecem e somem em ciclos desencontrados."
+        },
+        "tickerLoop": {
+          "label": "Loop contínuo",
+          "description": "Fileiras opostas deslizam sem interrupção."
+        },
+        "columnDrift": {
+          "label": "Deriva de colunas",
+          "description": "Colunas de cartões fluem em direções alternadas."
+        },
+        "imageTrail": {
+          "label": "Rastro de imagens",
+          "description": "Cartões surgem ao longo de um arco e se dissolvem."
+        },
+        "posterBurst": {
+          "label": "Explosão de pôsteres",
+          "description": "Pôsteres avançam em um ritmo sobreposto."
+        },
+        "diagonalWipe": {
+          "label": "Varredura diagonal",
+          "description": "Os quadros aparecem atrás de uma borda inclinada."
+        },
+        "stripeReveal": {
+          "label": "Revelação em faixas",
+          "description": "As imagens se montam em faixas verticais escalonadas."
+        },
+        "splitReveal": {
+          "label": "Revelação dividida",
+          "description": "Dois painéis se encontram a partir de lados opostos."
+        },
+        "showcaseStream": {
+          "label": "Fluxo de vitrine",
+          "description": "Os cartões percorrem um anel inclinado em perspectiva."
+        },
+        "cardTotem": {
+          "label": "Totem de cartões",
+          "description": "Uma faixa vertical em perspectiva flui pelo centro."
+        },
+        "filmStrip": {
+          "label": "Tira de filme",
+          "description": "Uma faixa curva de cartões desliza pelo quadro."
+        },
+        "orbitCarousel": {
+          "label": "Carrossel orbital",
+          "description": "Os cartões orbitam em camadas de profundidade com foco frontal."
+        },
+        "flipGrid": {
+          "label": "Grade giratória",
+          "description": "As células se dobram entre dois conjuntos de mídia."
+        }
+      },
+      "parameters": {
+        "duration": "Duração do loop",
+        "background": "Fundo",
+        "pickColor": "Escolher cor",
+        "padding": "Preenchimento",
+        "gap": "Espaçamento",
+        "cornerRadius": "Raio dos cantos",
+        "railSize": "Tamanho da faixa",
+        "sideScale": "Escala dos cartões laterais",
+        "cardInset": "Recuo do cartão",
+        "spacing": "Distribuição",
+        "easing": "Suavização",
+        "direction": "Direção",
+        "backgroundDim": "Escurecer fundo",
+        "zoom": "Zoom",
+        "tilt": "Inclinação",
+        "trailLength": "Comprimento do rastro",
+        "staggerOverlap": "Sobreposição escalonada",
+        "edgeAngle": "Ângulo da borda",
+        "strips": "Faixas",
+        "hold": "Pausa",
+        "perspective": "Perspectiva",
+        "ringTilt": "Inclinação do anel",
+        "ringOpening": "Abertura do anel",
+        "ringSize": "Tamanho do anel",
+        "cardSize": "Tamanho do cartão",
+        "backFade": "Atenuação traseira"
+      },
+      "easing": {
+        "smooth": "Suave",
+        "snappy": "Rápido",
+        "overshoot": "Ultrapassagem",
+        "spring": "Mola"
+      },
+      "direction": { "horizontal": "Horizontal", "vertical": "Vertical" },
+      "preview": {
+        "play": "Reproduzir prévia",
+        "pause": "Pausar prévia",
+        "restart": "Reiniciar prévia",
+        "scrubber": "Cabeçote da prévia"
+      }
+    },
     "captions": {
       "addedFromTranscript": "Adicionado da transcricao",
       "addedWithModel": "Adicionado com modelo",
@@ -57,6 +253,7 @@
       "speed": "Velocidade: {{speed}}x"
     },
     "contextMenu": {
+      "motionLayout": "Layout animado",
       "bentoLayout": "Layout bento",
       "captions": "Legendas",
       "clearAll": "Limpar tudo",

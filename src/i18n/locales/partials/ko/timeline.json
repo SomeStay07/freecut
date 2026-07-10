@@ -34,6 +34,199 @@
       "saveAsPreset": "프리셋으로 저장",
       "title": "벤토 레이아웃"
     },
+    "motionLayout": {
+      "title": "모션 레이아웃",
+      "description": "선택한 슬롯 {{count}}개를 재사용 가능한 컴파운드 클립으로 애니메이션합니다.",
+      "inspector": "모션 설정",
+      "mediaSlots": "미디어 · 슬롯 {{count}}개",
+      "slotLimit": "처음 {{count}}개 슬롯을 사용합니다",
+      "moveEarlier": "슬롯을 앞으로 이동",
+      "moveLater": "슬롯을 뒤로 이동",
+      "compoundHint": "편집 가능한 컴파운드 클립을 만듭니다. 원본 애니메이션은 유지됩니다.",
+      "apply": "모션 레이아웃 적용",
+      "applied": "{{template}} 적용됨",
+      "applyFailed": "모션 레이아웃을 적용하지 못했습니다",
+      "generatedName": "모션 레이아웃 · {{template}}",
+      "resetSettings": "설정 초기화",
+      "workspace": {
+        "sources": "소스",
+        "templates": "템플릿",
+        "myLayouts": "내 레이아웃",
+        "projectClips": "프로젝트 클립",
+        "noSources": "타임라인에 영상 클립을 추가한 뒤 여기에서 선택하세요.",
+        "removeSlot": "슬롯 제거",
+        "newLayout": "새 레이아웃",
+        "saveLayout": "레이아웃 저장",
+        "done": "완료",
+        "backToEdit": "편집으로 돌아가기",
+        "unsaved": "저장되지 않음",
+        "bestWith": "슬롯 {{count}}개",
+        "noLayouts": "모션 레이아웃이 아직 없습니다",
+        "noLayoutsHint": "템플릿에서 만든 후 여기에서 편집하거나 다시 사용할 수 있습니다.",
+        "format": "포맷",
+        "mediaSlots": "미디어 슬롯",
+        "slotsRequired": "{{count}}개 채움 · {{required}}개 필요",
+        "slotLabel": "슬롯 {{count}}",
+        "slotPlaceholder": "슬롯 {{count}}에 미디어 추가",
+        "chooseClip": "프로젝트 클립 선택",
+        "chooseForSlot": "슬롯 {{count}}의 미디어 선택",
+        "alreadyUsed": "이미 사용 중",
+        "dropUnavailable": "이 미디어는 여기서 사용할 수 없거나 이미 할당되었습니다.",
+        "customize": "모션 조정",
+        "previewHint": "오른쪽 슬롯에서 미디어를 선택하세요. 자리표시자로 템플릿 리듬을 미리 볼 수 있습니다.",
+        "previewReady": "프로젝트 클립 {{count}}개 미리 보는 중",
+        "readyToCreate": "만들 준비 완료",
+        "addMoreSlots": "계속하려면 클립 {{count}}개를 더 추가하세요",
+        "addMoreSlots_one": "계속하려면 클립 1개를 더 추가하세요",
+        "addMoreSlots_other": "계속하려면 클립 {{count}}개를 더 추가하세요",
+        "createMotionClip": "모션 클립 만들기",
+        "updateMotionClip": "모션 클립 업데이트",
+        "templateNeedsFewer": "이 템플릿을 사용하기 전에 할당된 클립 {{count}}개를 제거하세요.",
+        "discardTitle": "저장하지 않은 변경 사항을 버릴까요?",
+        "discardDescription": "모션 작업 공간의 변경 사항이 아직 적용되지 않았습니다.",
+        "discardChanges": "변경 사항 버리기",
+        "phases": "모션 단계",
+        "intro": "인트로",
+        "hold": "유지",
+        "outro": "아웃트로"
+      },
+      "categories": {
+        "grid": "그리드",
+        "spotlight": "스포트라이트 및 포커스",
+        "stack": "스택 및 분산",
+        "carousel": "캐러셀 및 흐름",
+        "reveal": "리빌 및 와이프",
+        "perspective": "3D 및 원근감"
+      },
+      "templates": {
+        "gridReveal": {
+          "label": "그리드 리빌",
+          "description": "타일이 조립되고 유지된 뒤 흩어집니다."
+        },
+        "centerStage": {
+          "label": "센터 스테이지",
+          "description": "한 번에 하나의 슬롯이 프레임을 채웁니다."
+        },
+        "focusShift": {
+          "label": "포커스 시프트",
+          "description": "포커스 패널과 사이드 레일이 자리를 바꿉니다."
+        },
+        "stackSlide": {
+          "label": "스택 슬라이드",
+          "description": "겹친 카드 덱이 깊이감 있게 전진합니다."
+        },
+        "positionDance": {
+          "label": "포지션 댄스",
+          "description": "슬롯이 리듬감 있는 구도를 순환합니다."
+        },
+        "carouselFlow": {
+          "label": "캐러셀 플로우",
+          "description": "흐르는 벨트가 중앙 슬롯에 초점을 맞춥니다."
+        },
+        "spotlightZoom": {
+          "label": "스포트라이트 줌",
+          "description": "그리드 타일이 번갈아 프레임을 채웁니다."
+        },
+        "deckPeel": { "label": "덱 필", "description": "겹친 덱의 앞 카드가 아래로 떨어집니다." },
+        "zoomParallax": {
+          "label": "줌 패럴랙스",
+          "description": "느린 줌이 겹친 크로스페이드를 따라 이동합니다."
+        },
+        "popGrid": {
+          "label": "팝 그리드",
+          "description": "타일이 엇박자 주기로 나타났다 사라집니다."
+        },
+        "tickerLoop": {
+          "label": "티커 루프",
+          "description": "반대 방향의 행이 끊김 없이 흐릅니다."
+        },
+        "columnDrift": {
+          "label": "컬럼 드리프트",
+          "description": "카드 열이 번갈아 다른 방향으로 흐릅니다."
+        },
+        "imageTrail": {
+          "label": "이미지 트레일",
+          "description": "카드가 곡선을 따라 나타나고 녹듯 사라집니다."
+        },
+        "posterBurst": {
+          "label": "포스터 버스트",
+          "description": "포스터가 겹치는 리듬으로 앞으로 튀어나옵니다."
+        },
+        "diagonalWipe": {
+          "label": "대각선 와이프",
+          "description": "기울어진 가장자리가 지나가며 프레임을 드러냅니다."
+        },
+        "stripeReveal": {
+          "label": "스트라이프 리빌",
+          "description": "이미지가 엇갈린 세로 줄무늬로 조립됩니다."
+        },
+        "splitReveal": {
+          "label": "스플릿 리빌",
+          "description": "두 패널이 반대쪽 가장자리에서 만납니다."
+        },
+        "showcaseStream": {
+          "label": "쇼케이스 스트림",
+          "description": "카드가 기울어진 원근 링을 따라 흐릅니다."
+        },
+        "cardTotem": {
+          "label": "카드 토템",
+          "description": "원근감 있는 세로 카드 띠가 중앙을 통과합니다."
+        },
+        "filmStrip": {
+          "label": "필름 스트립",
+          "description": "곡선 카드 띠가 프레임을 가로질러 미끄러집니다."
+        },
+        "orbitCarousel": {
+          "label": "오빗 캐러셀",
+          "description": "카드가 깊이감 있게 회전하며 앞쪽 카드에 초점을 맞춥니다."
+        },
+        "flipGrid": {
+          "label": "플립 그리드",
+          "description": "그리드 셀이 접히며 두 미디어 세트 사이를 전환합니다."
+        }
+      },
+      "parameters": {
+        "duration": "루프 길이",
+        "background": "배경",
+        "pickColor": "색상 선택",
+        "padding": "패딩",
+        "gap": "간격",
+        "cornerRadius": "모서리 반경",
+        "railSize": "레일 크기",
+        "sideScale": "측면 카드 배율",
+        "cardInset": "카드 안쪽 여백",
+        "spacing": "배치 간격",
+        "easing": "이징",
+        "direction": "방향",
+        "backgroundDim": "배경 어둡기",
+        "zoom": "줌",
+        "tilt": "기울기",
+        "trailLength": "트레일 길이",
+        "staggerOverlap": "스태거 겹침",
+        "edgeAngle": "가장자리 각도",
+        "strips": "줄무늬 수",
+        "hold": "유지 시간",
+        "perspective": "원근감",
+        "ringTilt": "링 기울기",
+        "ringOpening": "링 열림",
+        "ringSize": "링 크기",
+        "cardSize": "카드 크기",
+        "backFade": "후면 페이드"
+      },
+      "easing": {
+        "smooth": "부드럽게",
+        "snappy": "빠르게",
+        "overshoot": "오버슈트",
+        "spring": "스프링"
+      },
+      "direction": { "horizontal": "가로", "vertical": "세로" },
+      "preview": {
+        "play": "미리보기 재생",
+        "pause": "미리보기 일시정지",
+        "restart": "미리보기 다시 시작",
+        "scrubber": "미리보기 재생 헤드"
+      }
+    },
     "captions": {
       "addedFromTranscript": "대본에서 추가됨",
       "addedWithModel": "모델로 추가됨",
@@ -57,6 +250,7 @@
       "speed": "속도: {{speed}}x"
     },
     "contextMenu": {
+      "motionLayout": "모션 레이아웃",
       "bentoLayout": "벤토 레이아웃",
       "captions": "자막",
       "clearAll": "모두 지우기",

@@ -50,6 +50,7 @@ import { collectVisibleTextFontFamilies, resolveTrackRenderState } from '../util
 import { getLinkedVideoIdsWithAudio, hasLinkedAudioCompanion } from '@/shared/utils/linked-media'
 import { resolveProxyUrl } from '@/runtime/composition-runtime/deps/media-library'
 import { loadFonts } from '../utils/fonts'
+import { calculateCompositionFitLayout } from '@/shared/utils/composition-fit'
 
 const EMPTY_AUDIO_EQ_STAGES: ResolvedAudioEqSettings[] = []
 type TrackRenderState = ReturnType<typeof resolveTrackRenderState>
@@ -57,6 +58,7 @@ const EMPTY_VISIBLE_TRACKS_BY_ORDER_DESC: TrackRenderState['visibleTracksByOrder
 const EMPTY_VISIBLE_TRACKS: TrackRenderState['visibleTracks'] = []
 
 type CompositionWrapperItem = CompositionItemType | (AudioItem & { compositionId: string })
+type CompositionRenderMode = 'full' | 'visual-only' | 'audio-only'
 
 interface CompositionWindow {
   durationInFrames: number
@@ -72,13 +74,23 @@ interface CompositionContentProps {
   parentMuted?: boolean
   parentVisible?: boolean
   renderDepth?: number
-  renderMode?: 'full' | 'visual-only' | 'audio-only'
+  renderMode?: CompositionRenderMode
   audioGainMultiplier?: number
   audioGainLiveItemIds?: string[]
   audioEqStages?: ResolvedAudioEqSettings[]
   audioPitchShiftSemitones?: number
   crossfadeFadeInFrames?: number
   crossfadeFadeOutFrames?: number
+}
+
+function resolveNestedCompositionRenderMode(
+  parentMode: CompositionRenderMode,
+  items: TimelineItem[],
+  item: TimelineItem,
+): CompositionRenderMode {
+  if (item.type !== 'composition') return 'full'
+  if (parentMode !== 'full') return parentMode
+  return hasLinkedAudioCompanion(items, item) ? 'visual-only' : 'full'
 }
 
 /**
@@ -234,6 +246,13 @@ export const CompositionContent = React.memo<CompositionContentProps>(
       void blobUrlVersion
       if (!subComp) return []
       return subComp.items
+        .map((subItem) =>
+          subComp.motionLayout &&
+          subItem.type === 'composition' &&
+          subItem.compositionFit === undefined
+            ? { ...subItem, compositionFit: 'cover' as const }
+            : subItem,
+        )
         .map((subItem) => resolveSubCompItem(subItem, nestedMediaResolutionMode))
         .flatMap((subItem) => {
           const mapped = mapSubCompItemToWrapperWindow({
@@ -407,7 +426,9 @@ export const CompositionContent = React.memo<CompositionContentProps>(
                   // Mask shapes are control items and should not render visually.
                   !(subItem.type === 'shape' && subItem.isMask) &&
                   (renderMode !== 'visual-only' || subItem.type !== 'audio') &&
-                  (renderMode !== 'audio-only' || subItem.type === 'audio'),
+                  (renderMode !== 'audio-only' ||
+                    subItem.type === 'audio' ||
+                    subItem.type === 'composition'),
               ),
             }
           })
@@ -539,82 +560,96 @@ export const CompositionContent = React.memo<CompositionContentProps>(
       )
     }
 
-    // CSS scale from sub-comp native resolution to parent container dimensions
-    const scaleX = subComp.width > 0 ? containerDims.width / subComp.width : 1
-    const scaleY = subComp.height > 0 ? containerDims.height / subComp.height : 1
+    const compositionFit = item.type === 'composition' ? (item.compositionFit ?? 'fill') : 'fill'
+    const fitLayout = calculateCompositionFitLayout(
+      subComp.width,
+      subComp.height,
+      containerDims.width,
+      containerDims.height,
+      compositionFit,
+    )
 
     return (
       <div
         style={{
-          width: subComp.width,
-          height: subComp.height,
-          transform: `scale(${scaleX}, ${scaleY})`,
-          transformOrigin: '0 0',
+          width: containerDims.width,
+          height: containerDims.height,
           overflow: 'hidden',
           position: 'relative',
           visibility: parentVisible ? 'visible' : 'hidden',
         }}
       >
-        <CompositionSpaceProvider
-          projectWidth={subComp.width}
-          projectHeight={subComp.height}
-          renderWidth={subComp.width}
-          renderHeight={subComp.height}
+        <div
+          style={{
+            position: 'absolute',
+            left: fitLayout.offsetX,
+            top: fitLayout.offsetY,
+            width: subComp.width,
+            height: subComp.height,
+            transform: `scale(${fitLayout.scaleX}, ${fitLayout.scaleY})`,
+            transformOrigin: '0 0',
+          }}
         >
-          <VideoConfigProvider
-            width={subComp.width}
-            height={subComp.height}
-            fps={subComp.fps}
-            durationInFrames={subComp.durationInFrames}
+          <CompositionSpaceProvider
+            projectWidth={subComp.width}
+            projectHeight={subComp.height}
+            renderWidth={subComp.width}
+            renderHeight={subComp.height}
           >
-            <KeyframesProvider keyframes={subComp.keyframes}>
-              <AbsoluteFill>
-                <StableVideoSequence
-                  items={videoItems}
-                  renderItem={renderVideoItem}
-                  premountFor={Math.round(subComp.fps)}
-                />
+            <VideoConfigProvider
+              width={subComp.width}
+              height={subComp.height}
+              fps={subComp.fps}
+              durationInFrames={subComp.durationInFrames}
+            >
+              <KeyframesProvider keyframes={subComp.keyframes}>
+                <AbsoluteFill>
+                  <StableVideoSequence
+                    items={videoItems}
+                    renderItem={renderVideoItem}
+                    premountFor={Math.round(subComp.fps)}
+                  />
 
-                {nonVideoTrackItems.map((track) => (
-                  <AbsoluteFill
-                    key={track.trackId}
-                    style={{
-                      zIndex: (maxTrackOrder - track.trackOrder) * 1000 + 100,
-                      visibility: track.trackVisible ? 'visible' : 'hidden',
-                    }}
-                  >
-                    {track.items.map((subItem) => (
-                      <Sequence
-                        key={subItem.id}
-                        from={subItem.from}
-                        durationInFrames={subItem.durationInFrames}
-                      >
-                        <ItemContent
-                          item={subItem}
-                          muted={track.muted || linkedVideoIdsWithOwnedAudio.has(subItem.id)}
-                          visible={track.trackVisible}
-                          masks={getMasksForTrackOrder(activeMaskInfos, track.trackOrder)}
-                          renderDepth={renderDepth}
-                          renderCompositionContent={renderCompositionContent}
-                          compositionRenderMode={
-                            subItem.type === 'composition' &&
-                            hasLinkedAudioCompanion(resolvedItems, subItem)
-                              ? 'visual-only'
-                              : 'full'
-                          }
-                          audioGainMultiplier={effectiveAudioGainMultiplier}
-                          audioGainLiveItemIds={effectiveAudioGainLiveItemIds}
-                          audioEqStages={trackMergedEqStages.get(track.trackId) ?? audioEqStages}
-                          audioPitchShiftSemitones={audioPitchShiftSemitones}
-                        />
-                      </Sequence>
-                    ))}
-                  </AbsoluteFill>
-                ))}
-              </AbsoluteFill>
-            </KeyframesProvider>
-          </VideoConfigProvider>
-        </CompositionSpaceProvider>
+                  {nonVideoTrackItems.map((track) => (
+                    <AbsoluteFill
+                      key={track.trackId}
+                      style={{
+                        zIndex: (maxTrackOrder - track.trackOrder) * 1000 + 100,
+                        visibility: track.trackVisible ? 'visible' : 'hidden',
+                      }}
+                    >
+                      {track.items.map((subItem) => (
+                        <Sequence
+                          key={subItem.id}
+                          from={subItem.from}
+                          durationInFrames={subItem.durationInFrames}
+                        >
+                          <ItemContent
+                            item={subItem}
+                            muted={track.muted || linkedVideoIdsWithOwnedAudio.has(subItem.id)}
+                            visible={track.trackVisible}
+                            masks={getMasksForTrackOrder(activeMaskInfos, track.trackOrder)}
+                            renderDepth={renderDepth}
+                            renderCompositionContent={renderCompositionContent}
+                            compositionRenderMode={resolveNestedCompositionRenderMode(
+                              renderMode,
+                              resolvedItems,
+                              subItem,
+                            )}
+                            audioGainMultiplier={effectiveAudioGainMultiplier}
+                            audioGainLiveItemIds={effectiveAudioGainLiveItemIds}
+                            audioEqStages={trackMergedEqStages.get(track.trackId) ?? audioEqStages}
+                            audioPitchShiftSemitones={audioPitchShiftSemitones}
+                          />
+                        </Sequence>
+                      ))}
+                    </AbsoluteFill>
+                  ))}
+                </AbsoluteFill>
+              </KeyframesProvider>
+            </VideoConfigProvider>
+          </CompositionSpaceProvider>
+        </div>
       </div>
     )
   },

@@ -40,7 +40,8 @@
       "label": "Workspaces",
       "edit": "Edit",
       "color": "Color",
-      "animate": "Animate"
+      "animate": "Animate",
+      "motion": "Motion"
     },
     "backToProjects": "Back to Projects",
     "backToProjectsAria": "Back to projects",

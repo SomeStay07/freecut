@@ -23,7 +23,7 @@ import {
 } from '../render-span'
 import type { CanvasSettings, ItemRenderContext, ItemTransform, SubCompRenderData } from './types'
 import { log } from './shared'
-import { calculateMediaDrawDimensions } from './media-draw'
+import { calculateCompositionFitLayout } from '@/shared/utils/composition-fit'
 
 /**
  * Render a CompositionItem by rendering all its sub-composition items to an
@@ -286,21 +286,35 @@ export async function renderCompositionItem(
 
     subCtx.drawImage(subContentCanvas, 0, 0)
 
-    // Draw the sub-composition result onto the main canvas at the CompositionItem's position
-    const drawDimensions = calculateMediaDrawDimensions(
+    // Draw the sub-composition result into its wrapper without distorting
+    // authored pixels when an aspect-preserving fit mode is requested.
+    const fitLayout = calculateCompositionFitLayout(
       subCanvas.width,
       subCanvas.height,
-      transform,
-      rctx.canvasSettings,
+      transform.width,
+      transform.height,
+      item.compositionFit ?? 'fill',
     )
+    const viewportX = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2
+    const viewportY = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2
 
-    ctx.drawImage(
-      subCanvas,
-      drawDimensions.x,
-      drawDimensions.y,
-      drawDimensions.width,
-      drawDimensions.height,
-    )
+    ctx.save()
+    try {
+      if (item.compositionFit && item.compositionFit !== 'fill') {
+        ctx.beginPath()
+        ctx.rect(viewportX, viewportY, transform.width, transform.height)
+        ctx.clip()
+      }
+      ctx.drawImage(
+        subCanvas,
+        viewportX + fitLayout.offsetX,
+        viewportY + fitLayout.offsetY,
+        fitLayout.width,
+        fitLayout.height,
+      )
+    } finally {
+      ctx.restore()
+    }
   } finally {
     rctx.canvasPool.release(subContentCanvas)
     rctx.canvasPool.release(subCanvas)

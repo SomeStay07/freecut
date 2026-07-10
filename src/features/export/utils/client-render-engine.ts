@@ -567,11 +567,18 @@ export async function createCompositionRenderer(
   const subCompRenderData = new Map<string, SubCompRenderData>()
 
   const buildSubCompRenderDataEntry = (subComp: SubComposition): SubCompRenderData => {
+    const renderItems = subComp.motionLayout
+      ? subComp.items.map((item) =>
+          item.type === 'composition' && item.compositionFit === undefined
+            ? { ...item, compositionFit: 'cover' as const }
+            : item,
+        )
+      : subComp.items
     const sorted = [...subComp.tracks].sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
     const sortedWithItems = sorted.map((t) => ({
       order: t.order ?? 0,
       visible: t.visible !== false,
-      items: subComp.items.filter(
+      items: renderItems.filter(
         (i) => i.trackId === t.id && i.type !== 'audio' && i.type !== 'adjustment',
       ),
     }))

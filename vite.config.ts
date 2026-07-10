@@ -216,6 +216,7 @@ export default defineConfig({
           }
           if (
             id.includes('/src/features/timeline/components/bento-layout-dialog') ||
+            id.includes('/src/features/timeline/components/motion-layout-dialog') ||
             id.includes('/src/features/timeline/components/reverse-conform-dialog') ||
             id.includes('/src/features/timeline/components/silence-removal-dialog') ||
             id.includes('/src/features/timeline/components/filler-removal-dialog')

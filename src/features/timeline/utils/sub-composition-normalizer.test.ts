@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vite-plus/test'
-import type { ShapeItem, TimelineTrack } from '@/types/timeline'
+import type { CompositionItem, ShapeItem, TimelineTrack } from '@/types/timeline'
 import { DEFAULT_TRACK_HEIGHT } from '../constants'
 import { hydrateTracksFromItems, normalizeSubComposition } from './sub-composition-normalizer'
 
@@ -77,5 +77,30 @@ describe('sub-composition-normalizer', () => {
     expect(hydrated[0]?.id).toBe('missing-track')
     expect(hydrated[0]?.visible).toBe(true)
     expect(hydrated[0]?.items).toEqual([orphan])
+  })
+
+  it('upgrades existing motion-layout actors to aspect-preserving cover', () => {
+    const slot: CompositionItem = {
+      id: 'slot-1',
+      type: 'composition',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 30,
+      label: 'Slot',
+      compositionId: 'source-1',
+      compositionWidth: 1920,
+      compositionHeight: 1080,
+    }
+
+    const normalized = normalizeSubComposition({
+      id: 'motion-layout-1',
+      name: 'Motion Layout',
+      items: [slot],
+      tracks: [makeTrack()],
+      motionLayout: {},
+    })
+
+    expect(normalized.items[0]).toMatchObject({ compositionFit: 'cover' })
+    expect(normalized.tracks[0]?.items[0]).toMatchObject({ compositionFit: 'cover' })
   })
 })

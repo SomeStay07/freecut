@@ -34,6 +34,202 @@
       "saveAsPreset": "プリセットとして保存",
       "title": "ベントーレイアウト"
     },
+    "motionLayout": {
+      "title": "モーションレイアウト",
+      "description": "選択した{{count}}個のスロットを再利用可能なコンパウンドクリップとしてアニメーション化します。",
+      "inspector": "モーション設定",
+      "mediaSlots": "メディア · {{count}}スロット",
+      "slotLimit": "先頭の{{count}}スロットを使用します",
+      "moveEarlier": "スロットを前へ移動",
+      "moveLater": "スロットを後ろへ移動",
+      "compoundHint": "編集可能なコンパウンドクリップを作成します。元のアニメーションは保持されます。",
+      "apply": "モーションレイアウトを適用",
+      "applied": "{{template}}を適用しました",
+      "applyFailed": "モーションレイアウトを適用できませんでした",
+      "generatedName": "モーションレイアウト · {{template}}",
+      "resetSettings": "設定をリセット",
+      "workspace": {
+        "sources": "ソース",
+        "templates": "テンプレート",
+        "myLayouts": "マイレイアウト",
+        "projectClips": "プロジェクトクリップ",
+        "noSources": "タイムラインに映像クリップを追加し、ここで選択してください。",
+        "removeSlot": "スロットを削除",
+        "newLayout": "新規レイアウト",
+        "saveLayout": "レイアウトを保存",
+        "done": "完了",
+        "backToEdit": "編集に戻る",
+        "unsaved": "未保存",
+        "bestWith": "{{count}}スロット",
+        "noLayouts": "モーションレイアウトはまだありません",
+        "noLayoutsHint": "テンプレートから作成すると、ここで編集や再利用ができます。",
+        "format": "フォーマット",
+        "mediaSlots": "メディアスロット",
+        "slotsRequired": "{{count}}件設定済み・{{required}}件必要",
+        "slotLabel": "スロット{{count}}",
+        "slotPlaceholder": "スロット{{count}}にメディアを追加",
+        "chooseClip": "プロジェクトクリップを選択",
+        "chooseForSlot": "スロット{{count}}のメディアを選択",
+        "alreadyUsed": "使用済み",
+        "dropUnavailable": "このメディアは利用できないか、すでに割り当てられています。",
+        "customize": "モーションを調整",
+        "previewHint": "右側のスロットからメディアを選択してください。プレースホルダーでテンプレートの動きを確認できます。",
+        "previewReady": "{{count}}件のプロジェクトクリップをプレビュー中",
+        "readyToCreate": "作成できます",
+        "addMoreSlots": "続行するにはあと{{count}}件追加してください",
+        "addMoreSlots_one": "続行するにはあと1件追加してください",
+        "addMoreSlots_other": "続行するにはあと{{count}}件追加してください",
+        "createMotionClip": "モーションクリップを作成",
+        "updateMotionClip": "モーションクリップを更新",
+        "templateNeedsFewer": "このテンプレートを使う前に、割り当て済みクリップを{{count}}件削除してください。",
+        "discardTitle": "未保存の変更を破棄しますか？",
+        "discardDescription": "モーションワークスペースの変更はまだ適用されていません。",
+        "discardChanges": "変更を破棄",
+        "phases": "モーションフェーズ",
+        "intro": "イントロ",
+        "hold": "ホールド",
+        "outro": "アウトロ"
+      },
+      "categories": {
+        "grid": "グリッド",
+        "spotlight": "スポットライトとフォーカス",
+        "stack": "スタックと散開",
+        "carousel": "カルーセルとフロー",
+        "reveal": "リビールとワイプ",
+        "perspective": "3Dと遠近感"
+      },
+      "templates": {
+        "gridReveal": {
+          "label": "グリッドリビール",
+          "description": "タイルが組み上がり、静止した後に散開します。"
+        },
+        "centerStage": {
+          "label": "センターステージ",
+          "description": "1つのスロットずつ画面全体に表示します。"
+        },
+        "focusShift": {
+          "label": "フォーカスシフト",
+          "description": "メインパネルとサイドレールが位置を交代します。"
+        },
+        "stackSlide": {
+          "label": "スタックスライド",
+          "description": "重なったカードが奥行きを伴って進みます。"
+        },
+        "positionDance": {
+          "label": "ポジションダンス",
+          "description": "スロットがリズミカルな構図を巡回します。"
+        },
+        "carouselFlow": {
+          "label": "カルーセルフロー",
+          "description": "流れる帯の中央にフォーカスを保ちます。"
+        },
+        "spotlightZoom": {
+          "label": "スポットライトズーム",
+          "description": "グリッドのタイルが順番に画面全体へ広がります。"
+        },
+        "deckPeel": {
+          "label": "デッキピール",
+          "description": "重なったデッキから前面のカードが落ちていきます。"
+        },
+        "zoomParallax": {
+          "label": "ズームパララックス",
+          "description": "ゆっくりしたズームが重なったクロスフェードを漂います。"
+        },
+        "popGrid": {
+          "label": "ポップグリッド",
+          "description": "タイルがずれた周期で現れて消えます。"
+        },
+        "tickerLoop": {
+          "label": "ティッカーループ",
+          "description": "反対方向の列が途切れず流れます。"
+        },
+        "columnDrift": {
+          "label": "カラムドリフト",
+          "description": "カード列が交互の方向へ流れます。"
+        },
+        "imageTrail": {
+          "label": "イメージトレイル",
+          "description": "カードが弧に沿って現れ、溶けるように消えます。"
+        },
+        "posterBurst": {
+          "label": "ポスターバースト",
+          "description": "ポスターが重なるリズムで前方へ飛び出します。"
+        },
+        "diagonalWipe": {
+          "label": "斜めワイプ",
+          "description": "傾いたエッジの移動に合わせて画面が現れます。"
+        },
+        "stripeReveal": {
+          "label": "ストライプリビール",
+          "description": "画像がずれた縦ストライプから組み上がります。"
+        },
+        "splitReveal": {
+          "label": "スプリットリビール",
+          "description": "2枚のパネルが反対側から出会います。"
+        },
+        "showcaseStream": {
+          "label": "ショーケースストリーム",
+          "description": "カードが傾いた遠近リングに沿って流れます。"
+        },
+        "cardTotem": {
+          "label": "カードトーテム",
+          "description": "遠近感のある縦のカード列が中央を流れます。"
+        },
+        "filmStrip": {
+          "label": "フィルムストリップ",
+          "description": "湾曲したカードの帯が画面を横切ります。"
+        },
+        "orbitCarousel": {
+          "label": "オービットカルーセル",
+          "description": "カードが奥行きを持って周回し、前面に焦点を合わせます。"
+        },
+        "flipGrid": {
+          "label": "フリップグリッド",
+          "description": "グリッドセルが折り畳まれ、2つのメディアセットを切り替えます。"
+        }
+      },
+      "parameters": {
+        "duration": "ループ時間",
+        "background": "背景",
+        "pickColor": "色を選択",
+        "padding": "パディング",
+        "gap": "間隔",
+        "cornerRadius": "角の丸み",
+        "railSize": "レールサイズ",
+        "sideScale": "サイドカードの倍率",
+        "cardInset": "カードの余白",
+        "spacing": "配置間隔",
+        "easing": "イージング",
+        "direction": "方向",
+        "backgroundDim": "背景の暗さ",
+        "zoom": "ズーム",
+        "tilt": "傾き",
+        "trailLength": "軌跡の長さ",
+        "staggerOverlap": "ずらしの重なり",
+        "edgeAngle": "エッジ角度",
+        "strips": "ストライプ数",
+        "hold": "保持時間",
+        "perspective": "遠近感",
+        "ringTilt": "リングの傾き",
+        "ringOpening": "リングの開き",
+        "ringSize": "リングサイズ",
+        "cardSize": "カードサイズ",
+        "backFade": "背面フェード"
+      },
+      "easing": {
+        "smooth": "スムーズ",
+        "snappy": "キビキビ",
+        "overshoot": "オーバーシュート",
+        "spring": "スプリング"
+      },
+      "direction": { "horizontal": "水平", "vertical": "垂直" },
+      "preview": {
+        "play": "プレビューを再生",
+        "pause": "プレビューを一時停止",
+        "restart": "プレビューを最初から再生",
+        "scrubber": "プレビュー再生ヘッド"
+      }
+    },
     "captions": {
       "addedFromTranscript": "文字起こしから追加しました",
       "addedWithModel": "モデルで追加しました",
@@ -57,6 +253,7 @@
       "speed": "速度: {{speed}}x"
     },
     "contextMenu": {
+      "motionLayout": "モーションレイアウト",
       "bentoLayout": "ベントレイアウト",
       "captions": "キャプション",
       "clearAll": "すべてクリア",

@@ -94,9 +94,11 @@ vi.mock('./item-content', async () => {
     ItemContent: ({
       item,
       muted,
+      compositionRenderMode,
     }: {
       item: { id: string; src?: string; audioSrc?: string }
       muted?: boolean
+      compositionRenderMode?: string
     }) => {
       const keyframes = useItemKeyframesFromContext(item.id)
       const keyframeCount =
@@ -109,6 +111,7 @@ vi.mock('./item-content', async () => {
           data-keyframe-count={String(keyframeCount)}
           data-src={item.src ?? ''}
           data-audio-src={item.audioSrc ?? ''}
+          data-composition-render-mode={compositionRenderMode ?? ''}
         />
       )
     },
@@ -244,6 +247,11 @@ describe('CompositionContent keyframes', () => {
         makeNestedAudioItem({
           id: 'sub-audio-visual-only',
         }),
+        makeParentCompositionItem({
+          id: 'sub-composition-visual-only',
+          compositionId: 'nested-visual-only',
+          trackId: 'sub-track-video',
+        }),
       ],
     })
 
@@ -262,6 +270,10 @@ describe('CompositionContent keyframes', () => {
 
     expect(screen.getByTestId('sub-item-sub-video-visual-only')).toBeInTheDocument()
     expect(screen.queryByTestId('sub-item-sub-audio-visual-only')).toBeNull()
+    expect(screen.getByTestId('sub-item-sub-composition-visual-only')).toHaveAttribute(
+      'data-composition-render-mode',
+      'visual-only',
+    )
   })
 
   it('renders only audio sub-items for compound audio wrappers in audio-only mode', () => {
@@ -274,6 +286,11 @@ describe('CompositionContent keyframes', () => {
         }),
         makeNestedAudioItem({
           id: 'sub-audio-audio-only',
+        }),
+        makeParentCompositionItem({
+          id: 'sub-composition-audio-only',
+          compositionId: 'nested-audio-only',
+          trackId: 'sub-track-video',
         }),
       ],
     })
@@ -300,6 +317,10 @@ describe('CompositionContent keyframes', () => {
 
     expect(screen.queryByTestId('sub-item-sub-video-audio-only')).toBeNull()
     expect(screen.getByTestId('sub-item-sub-audio-audio-only')).toBeInTheDocument()
+    expect(screen.getByTestId('sub-item-sub-composition-audio-only')).toHaveAttribute(
+      'data-composition-render-mode',
+      'audio-only',
+    )
   })
 
   it('clears stale nested media src until fresh blob urls exist', () => {

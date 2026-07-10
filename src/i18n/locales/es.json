@@ -40,7 +40,8 @@
       "label": "Espacios de trabajo",
       "edit": "Edición",
       "color": "Color",
-      "animate": "Animación"
+      "animate": "Animación",
+      "motion": "Movimiento"
     },
     "backToProjects": "Volver a proyectos",
     "backToProjectsAria": "Volver a proyectos",
