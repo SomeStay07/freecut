@@ -334,7 +334,19 @@
         "unloadLabel": "Yerel Modelleri Boşalt",
         "unloading": "Boşaltılıyor...",
         "unloaded": "Boşaltıldı",
-        "unload": "Boşalt"
+        "unload": "Boşalt",
+        "nativeTitle": "FreeCut Local",
+        "nativeChecking": "Yardımcı hizmet aranıyor...",
+        "nativeOffline": "FreeCut Local yüklü değil veya çalışmıyor.",
+        "nativeUnpaired": "Hizmet bulundu. FreeCut Local uygulamasındaki eşleştirme kodunu girin.",
+        "nativePaired": "FreeCut Local'a bağlandı",
+        "nativePairFailed": "FreeCut Local ile eşleştirilemedi",
+        "nativeConnectedDevice": "{{device}} cihazına bağlı",
+        "nativePairingPlaceholder": "6 karakterli eşleştirme kodu",
+        "nativePair": "Eşleştir",
+        "nativePairing": "Eşleştiriliyor...",
+        "nativeDisconnect": "Bağlantıyı kes",
+        "nativeDownload": "İndir"
       },
       "modelCache": {
         "title": "Yerel YZ Model Önbelleği",

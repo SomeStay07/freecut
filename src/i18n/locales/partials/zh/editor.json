@@ -722,6 +722,22 @@
       "expressiveTags": "表现标签"
     },
     "aiPanel": {
+      "nativeImage": {
+        "title": "原生图像生成",
+        "checking": "正在检查 FreeCut Local...",
+        "offline": "请安装并启动 FreeCut Local 以使用原生图像模型。",
+        "unpaired": "请先在设置 → 存储 → 本地 AI 中配对 FreeCut Local。",
+        "prompt": "提示词",
+        "promptPlaceholder": "描述你想创建的图像...",
+        "model": "模型",
+        "generate": "生成图像",
+        "generateFailed": "原生图像生成失败。",
+        "saveToLibrary": "保存到媒体库",
+        "saving": "正在保存...",
+        "saved": "已保存",
+        "savedToLibrary": "图像已保存到媒体库。",
+        "saveFailed": "无法保存生成的图像。"
+      },
       "textToSpeech": "文本转语音",
       "collapseTextToSpeech": "折叠文本转语音",
       "expandTextToSpeech": "展开文本转语音",

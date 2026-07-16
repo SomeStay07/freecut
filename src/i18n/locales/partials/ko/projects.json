@@ -334,7 +334,19 @@
         "unloadLabel": "로컬 모델 언로드",
         "unloading": "언로드 중...",
         "unloaded": "언로드됨",
-        "unload": "언로드"
+        "unload": "언로드",
+        "nativeTitle": "FreeCut Local",
+        "nativeChecking": "컴패니언 서비스를 찾는 중...",
+        "nativeOffline": "FreeCut Local이 설치되지 않았거나 실행 중이 아닙니다.",
+        "nativeUnpaired": "서비스를 찾았습니다. FreeCut Local에 표시된 페어링 코드를 입력하세요.",
+        "nativePaired": "FreeCut Local에 연결됨",
+        "nativePairFailed": "FreeCut Local과 페어링할 수 없습니다",
+        "nativeConnectedDevice": "{{device}}에 연결됨",
+        "nativePairingPlaceholder": "6자리 페어링 코드",
+        "nativePair": "페어링",
+        "nativePairing": "페어링 중...",
+        "nativeDisconnect": "연결 해제",
+        "nativeDownload": "다운로드"
       },
       "modelCache": {
         "title": "로컬 AI 모델 캐시",

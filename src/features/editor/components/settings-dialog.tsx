@@ -39,6 +39,7 @@ import {
 import {
   LocalInferenceUnloadControl,
   LocalModelCacheControl,
+  NativeInferenceControl,
   useSettingsStore,
   CAPTIONING_INTERVAL_BOUNDS,
   DEFAULT_CAPTIONING_INTERVAL_SECONDS,
@@ -1101,6 +1102,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                           </div>
                           <LocalInferenceUnloadControl />
                           <LocalModelCacheControl />
+                          <NativeInferenceControl />
                         </div>
                       </div>
                     )}

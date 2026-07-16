@@ -334,7 +334,19 @@
         "unloadLabel": "Lokale Modelle entladen",
         "unloading": "Wird entladen...",
         "unloaded": "Entladen",
-        "unload": "Entladen"
+        "unload": "Entladen",
+        "nativeTitle": "FreeCut Local",
+        "nativeChecking": "Companion-Dienst wird gesucht...",
+        "nativeOffline": "FreeCut Local ist nicht installiert oder wird nicht ausgeführt.",
+        "nativeUnpaired": "Dienst gefunden. Gib den in FreeCut Local angezeigten Kopplungscode ein.",
+        "nativePaired": "Mit FreeCut Local verbunden",
+        "nativePairFailed": "Kopplung mit FreeCut Local fehlgeschlagen",
+        "nativeConnectedDevice": "Mit {{device}} verbunden",
+        "nativePairingPlaceholder": "6-stelliger Kopplungscode",
+        "nativePair": "Koppeln",
+        "nativePairing": "Kopplung...",
+        "nativeDisconnect": "Trennen",
+        "nativeDownload": "Download"
       },
       "modelCache": {
         "title": "Cache für lokale KI-Modelle",

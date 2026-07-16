@@ -4,6 +4,7 @@
     "src/index.{ts,tsx,js,jsx}",
     "src/main.{ts,tsx,js,jsx}",
     "src/test/setup.ts",
+    "sidecar/ui/app.js",
     "headless/probe.mjs",
     "headless/smoke.mjs",
     "headless/media-smoke.mjs"
@@ -11,7 +12,9 @@
   "ignorePatterns": [
     // Static reachability cannot see URL-loaded assets such as /sw.js
     // and /moss-tts/moss_tts.worker.js.
-    "public/**"
+    "public/**",
+    // Loaded by sidecar/ui/index.html; fallow does not trace HTML stylesheet links.
+    "sidecar/ui/styles.css"
   ],
   "duplicates": {
     // Hide pair-only clones; focus on widespread copy-paste

@@ -722,6 +722,22 @@
       "expressiveTags": "표현 태그"
     },
     "aiPanel": {
+      "nativeImage": {
+        "title": "네이티브 이미지 생성",
+        "checking": "FreeCut Local 확인 중...",
+        "offline": "네이티브 이미지 모델을 사용하려면 FreeCut Local을 설치하고 실행하세요.",
+        "unpaired": "먼저 설정 → 저장소 → 로컬 AI에서 FreeCut Local을 페어링하세요.",
+        "prompt": "프롬프트",
+        "promptPlaceholder": "만들고 싶은 이미지를 설명하세요...",
+        "model": "모델",
+        "generate": "이미지 생성",
+        "generateFailed": "네이티브 이미지 생성에 실패했습니다.",
+        "saveToLibrary": "라이브러리에 저장",
+        "saving": "저장 중...",
+        "saved": "저장됨",
+        "savedToLibrary": "이미지를 미디어 라이브러리에 저장했습니다.",
+        "saveFailed": "생성된 이미지를 저장하지 못했습니다."
+      },
       "textToSpeech": "텍스트 음성 변환",
       "collapseTextToSpeech": "텍스트 음성 변환 접기",
       "expandTextToSpeech": "텍스트 음성 변환 펼치기",

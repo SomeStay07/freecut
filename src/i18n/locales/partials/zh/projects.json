@@ -334,7 +334,19 @@
         "unloadLabel": "卸载本地模型",
         "unloading": "正在卸载...",
         "unloaded": "已卸载",
-        "unload": "卸载"
+        "unload": "卸载",
+        "nativeTitle": "FreeCut Local",
+        "nativeChecking": "正在查找配套服务...",
+        "nativeOffline": "FreeCut Local 未安装或未运行。",
+        "nativeUnpaired": "已找到服务。请输入 FreeCut Local 中显示的配对码。",
+        "nativePaired": "已连接到 FreeCut Local",
+        "nativePairFailed": "无法与 FreeCut Local 配对",
+        "nativeConnectedDevice": "已连接到 {{device}}",
+        "nativePairingPlaceholder": "6 位配对码",
+        "nativePair": "配对",
+        "nativePairing": "正在配对...",
+        "nativeDisconnect": "断开连接",
+        "nativeDownload": "下载"
       },
       "modelCache": {
         "title": "本地 AI 模型缓存",

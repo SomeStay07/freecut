@@ -34,6 +34,9 @@ out
 
 # Testing
 coverage
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
 # Misc
 .cache
@@ -84,6 +87,14 @@ tmp-workspace/
 /waveform-bin/
 
 *.lock
+!sidecar/runtime/uv.lock
+!sidecar/src-tauri/Cargo.lock
+sidecar/src-tauri/binaries/*
+!sidecar/src-tauri/binaries/.gitkeep
+sidecar/src-tauri/gen/schemas/
+sidecar/src-tauri/target/
+sidecar/src-tauri/updater.key
+sidecar/src-tauri/updater.key.password
 plans/
 
 .compound-engineering/*.local.yaml

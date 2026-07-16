@@ -722,6 +722,22 @@
       "expressiveTags": "Tags expressivas"
     },
     "aiPanel": {
+      "nativeImage": {
+        "title": "Geração nativa de imagens",
+        "checking": "Verificando o FreeCut Local...",
+        "offline": "Instale e inicie o FreeCut Local para usar modelos de imagem nativos.",
+        "unpaired": "Primeiro pareie o FreeCut Local em Configurações → Armazenamento → IA local.",
+        "prompt": "Prompt",
+        "promptPlaceholder": "Descreva a imagem que você quer criar...",
+        "model": "Modelo",
+        "generate": "Gerar imagem",
+        "generateFailed": "A geração nativa de imagem falhou.",
+        "saveToLibrary": "Salvar na biblioteca",
+        "saving": "Salvando...",
+        "saved": "Salvo",
+        "savedToLibrary": "Imagem salva na biblioteca de mídia.",
+        "saveFailed": "Não foi possível salvar a imagem gerada."
+      },
       "textToSpeech": "Texto para fala",
       "collapseTextToSpeech": "Recolher texto para fala",
       "expandTextToSpeech": "Expandir texto para fala",

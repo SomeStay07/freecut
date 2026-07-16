@@ -722,6 +722,22 @@
       "expressiveTags": "İfade etiketleri"
     },
     "aiPanel": {
+      "nativeImage": {
+        "title": "Yerel Görsel Oluşturma",
+        "checking": "FreeCut Local kontrol ediliyor...",
+        "offline": "Yerel görsel modellerini kullanmak için FreeCut Local'ı yükleyip başlatın.",
+        "unpaired": "Önce Ayarlar → Depolama → Yerel Yapay Zeka bölümünden FreeCut Local'ı eşleştirin.",
+        "prompt": "İstem",
+        "promptPlaceholder": "Oluşturmak istediğiniz görseli açıklayın...",
+        "model": "Model",
+        "generate": "Görsel Oluştur",
+        "generateFailed": "Yerel görsel oluşturma başarısız oldu.",
+        "saveToLibrary": "Kitaplığa Kaydet",
+        "saving": "Kaydediliyor...",
+        "saved": "Kaydedildi",
+        "savedToLibrary": "Görsel medya kitaplığına kaydedildi.",
+        "saveFailed": "Oluşturulan görsel kaydedilemedi."
+      },
       "textToSpeech": "Metinden Sese",
       "collapseTextToSpeech": "Metinden sese bölümünü daralt",
       "expandTextToSpeech": "Metinden sese bölümünü genişlet",

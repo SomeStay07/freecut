@@ -722,6 +722,22 @@
       }
     },
     "aiPanel": {
+      "nativeImage": {
+        "title": "Native Image Generation",
+        "checking": "Checking FreeCut Local...",
+        "offline": "Install and start FreeCut Local to use native image models.",
+        "unpaired": "Pair FreeCut Local in Settings → Storage → Local AI first.",
+        "prompt": "Prompt",
+        "promptPlaceholder": "Describe the image you want to create...",
+        "model": "Model",
+        "generate": "Generate Image",
+        "generateFailed": "Native image generation failed.",
+        "saveToLibrary": "Save to Library",
+        "saving": "Saving...",
+        "saved": "Saved",
+        "savedToLibrary": "Saved image to the media library.",
+        "saveFailed": "Failed to save the generated image."
+      },
       "textToSpeech": "Text to Speech",
       "collapseTextToSpeech": "Collapse text to speech",
       "expandTextToSpeech": "Expand text to speech",

@@ -1,4 +1,4 @@
-export type LocalInferenceBackend = 'webgpu' | 'wasm' | 'unknown'
+export type LocalInferenceBackend = 'webgpu' | 'wasm' | 'native' | 'unknown'
 export type LocalInferenceState = 'loading' | 'running' | 'ready' | 'error'
 
 /**

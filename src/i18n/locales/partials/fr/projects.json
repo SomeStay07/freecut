@@ -334,7 +334,19 @@
         "unloadLabel": "Décharger les modèles locaux",
         "unloading": "Déchargement...",
         "unloaded": "Déchargé",
-        "unload": "Décharger"
+        "unload": "Décharger",
+        "nativeTitle": "FreeCut Local",
+        "nativeChecking": "Recherche du service compagnon...",
+        "nativeOffline": "FreeCut Local n'est pas installé ou n'est pas en cours d'exécution.",
+        "nativeUnpaired": "Service détecté. Saisissez le code affiché dans FreeCut Local.",
+        "nativePaired": "Connecté à FreeCut Local",
+        "nativePairFailed": "Impossible d'associer FreeCut Local",
+        "nativeConnectedDevice": "Connecté à {{device}}",
+        "nativePairingPlaceholder": "Code d'association à 6 caractères",
+        "nativePair": "Associer",
+        "nativePairing": "Association...",
+        "nativeDisconnect": "Déconnecter",
+        "nativeDownload": "Télécharger"
       },
       "modelCache": {
         "title": "Cache des modèles d'IA locaux",

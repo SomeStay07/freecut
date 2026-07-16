@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { i18n, i18nReady } from './i18n'
 import { App } from './app'
 import { createLogger } from '@/shared/logging/logger'
+import { nativeInferenceConnection } from '@/infrastructure/native-inference'
 import {
   getEditorProjectIdFromPathname,
   getEditorProjectReloadPathWithCacheBust,
@@ -15,6 +16,8 @@ const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000
 const ACCEPTED_APP_UPDATE_SIGNATURE_KEY = 'freecut-accepted-app-update-signature'
 
 let updateToastVisible = false
+
+nativeInferenceConnection.startMonitoring()
 
 // Debug utilities are editor-heavy; keep them out of the production startup graph.
 if (import.meta.env.DEV) {

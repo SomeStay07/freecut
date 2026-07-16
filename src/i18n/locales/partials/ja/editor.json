@@ -722,6 +722,22 @@
       "expressiveTags": "表現タグ"
     },
     "aiPanel": {
+      "nativeImage": {
+        "title": "ネイティブ画像生成",
+        "checking": "FreeCut Localを確認しています...",
+        "offline": "ネイティブ画像モデルを使用するには、FreeCut Localをインストールして起動してください。",
+        "unpaired": "先に設定 → ストレージ → ローカルAIでFreeCut Localをペアリングしてください。",
+        "prompt": "プロンプト",
+        "promptPlaceholder": "作成したい画像を説明してください...",
+        "model": "モデル",
+        "generate": "画像を生成",
+        "generateFailed": "ネイティブ画像生成に失敗しました。",
+        "saveToLibrary": "ライブラリに保存",
+        "saving": "保存中...",
+        "saved": "保存済み",
+        "savedToLibrary": "画像をメディアライブラリに保存しました。",
+        "saveFailed": "生成画像を保存できませんでした。"
+      },
       "textToSpeech": "テキスト読み上げ",
       "collapseTextToSpeech": "テキスト読み上げを折りたたむ",
       "expandTextToSpeech": "テキスト読み上げを展開",

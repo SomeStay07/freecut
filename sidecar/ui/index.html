@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FreeCut Local</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div class="mark">FC</div>
+        <div>
+          <p class="eyebrow">FREECUT COMPANION</p>
+          <h1>Local AI, without browser limits.</h1>
+          <p class="subtitle">Install and run native Diffusers models from FreeCut.</p>
+        </div>
+      </header>
+
+      <section class="card status-card">
+        <div>
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-title">Checking service...</span>
+        </div>
+        <span class="badge" id="status-badge">Checking</span>
+      </section>
+
+      <section class="card setup-card">
+        <div>
+          <p class="label">ONE-CLICK SETUP</p>
+          <h2 id="setup-title">Preparing FreeCut Local</h2>
+          <p id="setup-description">
+            FreeCut Local installs an isolated Python and inference runtime. It does not modify your
+            system Python.
+          </p>
+        </div>
+        <button class="primary" id="setup-button">Install and start</button>
+      </section>
+
+      <section class="card pairing-card">
+        <div>
+          <p class="label">PAIR WITH FREECUT</p>
+          <p>Enter this code in FreeCut Settings &rarr; Storage &rarr; Local AI.</p>
+        </div>
+        <button class="code" id="pairing-code" title="Copy pairing code">------</button>
+      </section>
+
+      <section class="card update-card">
+        <div>
+          <p class="label">APP UPDATES</p>
+          <h2 id="update-title">Keep FreeCut Local current</h2>
+          <p id="update-description">Check for signed updates without another installer download.</p>
+        </div>
+        <button class="secondary update-button" id="update-button">Check for updates</button>
+      </section>
+
+      <p class="error" id="error" hidden></p>
+      <p class="notice" id="notice" hidden></p>
+
+      <footer>
+        <button class="secondary" id="toggle-button" disabled>Start service</button>
+        <button class="secondary" id="open-button">Open FreeCut</button>
+        <span id="service-url">127.0.0.1</span>
+      </footer>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

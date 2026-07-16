@@ -334,7 +334,19 @@
         "unloadLabel": "Unload Local Models",
         "unloading": "Unloading...",
         "unloaded": "Unloaded",
-        "unload": "Unload"
+        "unload": "Unload",
+        "nativeTitle": "FreeCut Local",
+        "nativeChecking": "Looking for the companion service...",
+        "nativeOffline": "FreeCut Local is not installed or is not running.",
+        "nativeUnpaired": "Service found. Enter the pairing code shown in FreeCut Local.",
+        "nativePaired": "Connected to FreeCut Local",
+        "nativePairFailed": "Could not pair with FreeCut Local",
+        "nativeConnectedDevice": "Connected to {{device}}",
+        "nativePairingPlaceholder": "6-character pairing code",
+        "nativePair": "Pair",
+        "nativePairing": "Pairing...",
+        "nativeDisconnect": "Disconnect",
+        "nativeDownload": "Download"
       },
       "modelCache": {
         "title": "Local AI Model Cache",

@@ -46,6 +46,11 @@
     "headless:test:media": "node headless/media-test.mjs",
     "headless:test:portable": "npm run headless:test:node && npm run headless:test:chrome && npm run headless:test:media",
     "headless:gpu:probe": "node headless/probe.mjs",
+    "sidecar:prepare": "node sidecar/scripts/prepare-uv.mjs",
+    "sidecar:dev": "npm run sidecar:prepare && tauri dev --config sidecar/src-tauri/tauri.conf.json",
+    "sidecar:build": "npm run sidecar:prepare && tauri build --config sidecar/src-tauri/tauri.conf.json",
+    "sidecar:release": "npm run sidecar:prepare && tauri build --config sidecar/src-tauri/tauri.conf.json --config sidecar/src-tauri/tauri.updater.conf.json",
+    "sidecar:test": "uv run --no-project --with fastapi==0.139.0 --with httpx==0.28.1 --with pytest==9.1.1 python -m pytest sidecar/runtime/tests",
     "changelog:append": "node scripts/changelog-append.mjs",
     "changelog:rollup": "node scripts/changelog-rollup.mjs",
     "prepare": "vp config"
@@ -106,6 +111,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.2.2",
     "@tanstack/router-cli": "1.166.33",
+    "@tauri-apps/cli": "2.11.4",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",

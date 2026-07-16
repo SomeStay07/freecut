@@ -1,0 +1,113 @@
+name: FreeCut Local installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'sidecar-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        shell: pwsh
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Install uv
+        run: python -m pip install uv==0.11.24
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Verify companion components
+        shell: pwsh
+        run: |
+          npm run sidecar:prepare
+          cargo check --locked --manifest-path sidecar/src-tauri/Cargo.toml
+          npm run sidecar:test -- -q
+          npx vp test run src/infrastructure/native-inference/client.test.ts
+
+      - name: Build NSIS installer
+        if: ${{ !startsWith(github.ref, 'refs/tags/sidecar-v') }}
+        run: npm run sidecar:build
+
+      - name: Set tagged companion version
+        if: startsWith(github.ref, 'refs/tags/sidecar-v')
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}' -replace '^sidecar-v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+([+-][0-9A-Za-z.-]+)?$') {
+            throw "Tag does not contain a valid semantic version: $version"
+          }
+          $path = 'sidecar/src-tauri/tauri.conf.json'
+          $config = Get-Content -Raw $path | ConvertFrom-Json
+          $config.version = $version
+          $config | ConvertTo-Json -Depth 20 | Set-Content -Encoding utf8 $path
+
+      - name: Build signed updater installer
+        if: startsWith(github.ref, 'refs/tags/sidecar-v')
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run sidecar:release
+
+      - name: Create updater manifest
+        if: startsWith(github.ref, 'refs/tags/sidecar-v')
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem 'sidecar/src-tauri/target/release/bundle/nsis/*-setup.exe' | Select-Object -First 1
+          $signature = Get-Content -Raw "$($installer.FullName).sig"
+          $version = '${{ github.ref_name }}' -replace '^sidecar-v', ''
+          $assetName = [Uri]::EscapeDataString($installer.Name)
+          $manifest = [ordered]@{
+            version = $version
+            notes = "FreeCut Local $version"
+            pub_date = (Get-Date).ToUniversalTime().ToString('o')
+            platforms = [ordered]@{
+              'windows-x86_64' = [ordered]@{
+                signature = $signature.Trim()
+                url = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$assetName"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 latest.json
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: freecut-local-windows
+          path: |
+            sidecar/src-tauri/target/release/bundle/nsis/*-setup.exe
+            sidecar/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+            latest.json
+          if-no-files-found: error
+
+      - name: Publish tagged installer
+        if: startsWith(github.ref, 'refs/tags/sidecar-v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = Get-ChildItem 'sidecar/src-tauri/target/release/bundle/nsis/*-setup.exe' | Select-Object -First 1
+          $signature = "$($installer.FullName).sig"
+          gh release create '${{ github.ref_name }}' $installer.FullName $signature latest.json --title 'FreeCut Local ${{ github.ref_name }}' --generate-notes
+          gh release view 'freecut-local-updater' 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create 'freecut-local-updater' --title 'FreeCut Local updater feed' --notes 'Stable signed update metadata for FreeCut Local.' --prerelease
+          }
+          gh release upload 'freecut-local-updater' latest.json --clobber

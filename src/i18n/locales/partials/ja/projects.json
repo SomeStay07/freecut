@@ -334,7 +334,19 @@
         "unloadLabel": "ローカルモデルをアンロード",
         "unloading": "アンロード中...",
         "unloaded": "アンロード済み",
-        "unload": "アンロード"
+        "unload": "アンロード",
+        "nativeTitle": "FreeCut Local",
+        "nativeChecking": "コンパニオンサービスを検索しています...",
+        "nativeOffline": "FreeCut Localがインストールされていないか、実行されていません。",
+        "nativeUnpaired": "サービスが見つかりました。FreeCut Localに表示されたペアリングコードを入力してください。",
+        "nativePaired": "FreeCut Localに接続しました",
+        "nativePairFailed": "FreeCut Localとペアリングできませんでした",
+        "nativeConnectedDevice": "{{device}}に接続中",
+        "nativePairingPlaceholder": "6文字のペアリングコード",
+        "nativePair": "ペアリング",
+        "nativePairing": "ペアリング中...",
+        "nativeDisconnect": "切断",
+        "nativeDownload": "ダウンロード"
       },
       "modelCache": {
         "title": "ローカルAIモデルキャッシュ",
