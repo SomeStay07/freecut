@@ -134,6 +134,66 @@ npm run headless -- --workspace "<ws>" --list --json
 | `--head`                | off                            | Run a visible browser for debugging.                                                           |
 | `--harness-url <url>`   | —                              | Dev mode: drive a running `npm run dev` server instead of `dist/`.                             |
 
+## Fast iteration: single-frame grab & layout dump
+
+When you're hand-authoring a `project.json` and just need to check _where things
+landed_, don't render a clip and extract a frame with ffmpeg — that's the slow
+loop. Two lighter tools drive the same engine:
+
+### `frame.mjs` — one frame straight to PNG
+
+Renders a single composited frame (video + images + text + shapes + effects +
+transitions) directly to an image. No muxer, no video encoder, no audio
+pipeline — just the frame, so it returns in a fraction of the time a short clip
+export takes.
+
+```bash
+# Full-res PNG at 12.5s
+npm run headless:frame -- --workspace "<ws>" --project <id> --at 12.5 --out shot.png
+
+# By frame index, as a smaller JPG
+node headless/frame.mjs --workspace "<ws>" --project <id> --frame 300 \
+  --format jpg --width 960 --out shot.jpg
+```
+
+| Flag                     | Default                       | Notes                                  |
+| ------------------------ | ----------------------------- | -------------------------------------- |
+| `--at <sec>`             | 0                             | Time to grab (seconds).                |
+| `--frame <n>`            | —                             | Frame index (overrides `--at`).        |
+| `--out <path>`           | `headless/output/frame.<ext>` | Output image.                          |
+| `--format <f>`           | `png`                         | `png \| jpg \| webp`.                  |
+| `--width`/`--height <n>` | project resolution            | Output size (full quality by default). |
+| `--quality <0..1>`       | 1                             | Encoder quality for jpg/webp.          |
+
+Then just `Read` the PNG. GPU effects/transitions still need WebGPU (same as a
+full render); text/shapes/video composite without it.
+
+### `layout.mjs` — computed bounding boxes as JSON (no render)
+
+Dumps the resolved on-canvas box of every visible item at a frame, using the
+**exact transform resolver the export path uses** — so the coordinates match
+what a render would draw. No GPU, no media decode; it's pure transform math and
+returns near-instantly. Use it to trust coordinates _without_ rendering.
+
+```bash
+npm run headless:layout -- --workspace "<ws>" --project <id> --at 12.5
+# → prints JSON to stdout; pipe it:
+node headless/layout.mjs --workspace "<ws>" --project <id> --at 12.5 \
+  | jq '.items[] | select(.type=="text") | {id, text, x, y, width, height}'
+```
+
+Each item reports `{ id, type, trackId, from, durationInFrames, x, y, width,
+height, opacity, rotation, cornerRadius, visible, z }` (text items also carry
+`text`, `textAlign`, `verticalAlign`, `fontSize`). Coordinates are canvas-space
+**top-left corners** (origin top-left, +x right, +y down). `z` is draw order —
+**higher `z` composites on top**. Two items on one track with overlapping time
+both appear here; the one with the larger `z` is drawn last (on top), which is
+why a full-canvas opaque clip can hide another on the same track.
+
+> Note: both tools call new methods on `window.freecut` defined in
+> `src/headless/main.ts`, so rebuild `dist/` after pulling harness changes
+> (`npm run build`, or pass `--build`).
+
 ## Notes & limitations
 
 All CLIs support `--help`, reject unknown flags, and accept `--json` for a
@@ -229,6 +289,12 @@ curl -X POST localhost:8787/render -H 'content-type: application/json' \
   -d '{"project":"<id>","codec":"vp9","duration":5}' -o out.webm
 curl -X POST localhost:8787/edit -H 'content-type: application/json' \
   -d '{"project":"<id>","ops":[{"op":"addText","text":"Hi","from":0}]}'
+
+# fast iteration on a warm page (see frame.mjs / layout.mjs above):
+curl -X POST localhost:8787/frame -H 'content-type: application/json' \
+  -d '{"project":"<id>","at":12.5}' -o shot.png
+curl -s -X POST localhost:8787/layout -H 'content-type: application/json' \
+  -d '{"project":"<id>","at":12.5}' | jq '.items[] | select(.type=="text")'
 ```
 
 | Route               | Body                                                                                                               | Returns                                                                              |
@@ -238,9 +304,12 @@ curl -X POST localhost:8787/edit -H 'content-type: application/json' \
 | `GET /projects`     | —                                                                                                                  | `[{ id, projectId, name, updatedAt }]`; `id` is the actionable directory key.        |
 | `POST /render`      | `{ project\|projectObject, codec?, container?, resolution?, fps?, quality?, in?, outSec?, duration?, audioOnly? }` | the rendered file (attachment)                                                       |
 | `POST /edit`        | `{ project\|projectObject, ops, ... }`                                                                             | `{ ok, project, applied, results }`                                                  |
+| `POST /frame`       | `{ project\|projectObject, at?\|frame?, width?, height?, format?, quality? }`                                      | one composited frame image (attachment; full-res PNG by default)                     |
+| `POST /layout`      | `{ project\|projectObject, at?\|frame? }`                                                                          | `{ frame, atSeconds, canvas, items[] }` (computed boxes, no render)                  |
 
 `project` is a workspace project id; `projectObject` is an inline Project JSON.
-Media is resolved from the service's workspace by id.
+Media is resolved from the service's workspace by id. On a warm page, `/layout`
+returns in well under 100 ms (no render); `/frame` skips the Chrome cold start.
 
 ### Render success contract
 
