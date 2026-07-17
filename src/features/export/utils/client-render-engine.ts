@@ -1913,6 +1913,8 @@ export async function createCompositionRenderer(
         getCurrentKeyframes,
         getPreviewEffectsOverride,
         getLiveItemSnapshot,
+        hasTransparentVideoSource: (occItem) =>
+          videoExtractors.get(occItem.id)?.getCanBeTransparent() ?? false,
       }
       const isFullyOccluding = (baseItem: TimelineItem, trackOrder: number): boolean =>
         isItemFullyOccluding(baseItem, trackOrder, occlusionContext)
