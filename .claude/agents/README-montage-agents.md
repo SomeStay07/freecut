@@ -16,7 +16,7 @@
 - **montage-coldopen-composer** — cold-open тизер: 3-4 законченные фразы, нарастание интриги, рез по границам слов, reveal/withhold.
 - **montage-shorts-producer** — вертикальный шортс 9:16 (одна идея, хук за 1с, реФрейм, вшитые субтитры ВКЛ, петля). Заменяет 2/2b/3 для шортсов.
 
-## 3. План приёмов и движения
+## 3. План приёмов и движения (порядок вызова: CD → memolog → stinger, §0.5 скилла)
 
 - **creative-director** — какой приём на какой бит ПОВЕРХ готового стержня (плашка/цифра/стикер/демо-сайта/маскот/мем/zoom) + звук + обоснование под ЦА/бренд.
 - **stinger-planner** — слой «выскакивающей графики» (эмодзи/бейдж/скриншот/плашка) + звук, тайминг.
@@ -66,7 +66,7 @@
 | montage-frame-critic | PNG или mp4+таймкоды (!); режимы: моушен-чек, thumbnail | отчёт `qa/frame.md` + балл | PASS / PASS_WITH_FIXES / BLOCK |
 | montage-continuity-qc | project.json (!) + бренд-канон (!), финальный mp4, спека (для шортса — вертикальная) | отчёт `qa/continuity.md` + балл | PASS / PASS_WITH_FIXES / BLOCK |
 | retention-pacing-critic | до сборки: cue-list + running order (paper-edit/shot-list) (!); после: project.json (!); бриф, ниша/CTA платформы | отчёт `qa/pacing.md` + балл | PASS / PASS_WITH_FIXES / BLOCK |
-| audio-levels-checker | mp4 (!), цель LUFS, AUDIO-GATE-таймкоды намеренных пауз | отчёт `qa/audio.md` | PASS / PASS_WITH_FIXES / BLOCK |
+| audio-levels-checker | mp4 (!), цель LUFS, AUDIO-GATE-таймкоды (splice-паузы И overlay-дакинг, в координатах mp4) | отчёт `qa/audio.md` | PASS / PASS_WITH_FIXES / BLOCK |
 | youtube-metadata-reviewer | SEO-канон (!) + черновик (!) + сценарий (!) + голос (!) | отчёт | PASS / PASS_WITH_FIXES / BLOCK |
 | youtube-seo-scout | SEO-канон (!) + сценарий (!) | разведка | — |
 | youtube-audience-scout | SEO-канон/персоны (!) + голос (!) + сценарий (!) | разведка | — |
