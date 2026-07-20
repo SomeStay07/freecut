@@ -12,6 +12,7 @@ the output. Fidelity matches the in-app export — including hardware GPU effect
 transitions, audio, and (for edits) transition repair + linked-clip cascades.
 
 Two CLIs:
+
 - **`render.mjs`** (`npm run headless`) — render a project (or a slice) to video/audio.
 - **`edit.mjs`** — apply structural edits (add/split/trim/move/delete/transition) and write the project back.
 
@@ -72,23 +73,83 @@ npm run headless -- --workspace "<ws>" --project <id> --audio-only --container m
 
 ### Options
 
-| Flag | Default | Notes |
-|------|---------|-------|
-| `--workspace <dir>` | (required) | The FreeCut workspace folder (picked in the app). |
-| `--project <id\|file>` | (required) | Project id under the workspace, or a path to a `project.json`. |
-| `--out <path>` | `headless/output/<name>.<ext>` | Output file. |
-| `--codec <c>` | `h264` | `h264 \| h265 \| vp9 \| vp8 \| av1`. Falls back automatically if unsupported. |
-| `--container <c>` | derived | `mp4 \| webm \| mov \| mkv` (or `mp3 \| wav \| m4a` with `--audio-only`). |
-| `--resolution <WxH>` | project metadata | e.g. `1920x1080`. |
-| `--fps <n>` | project metadata | |
-| `--quality <q>` | `high` | `low \| medium \| high \| ultra` (controls bitrate). |
-| `--in <sec>` | 0 | Render range start (seconds). |
-| `--out-sec <sec>` | end | Render range end (seconds). |
-| `--duration <sec>` | — | Render this many seconds from `--in`. |
-| `--audio-only` | off | Render audio only. |
-| `--build` | off | Build `dist/` first if the harness isn't built. |
-| `--head` | off | Run a visible browser for debugging. |
-| `--harness-url <url>` | — | Dev mode: drive a running `npm run dev` server instead of `dist/`. |
+| Flag                   | Default                        | Notes                                                                         |
+| ---------------------- | ------------------------------ | ----------------------------------------------------------------------------- |
+| `--workspace <dir>`    | (required)                     | The FreeCut workspace folder (picked in the app).                             |
+| `--project <id\|file>` | (required)                     | Project id under the workspace, or a path to a `project.json`.                |
+| `--out <path>`         | `headless/output/<name>.<ext>` | Output file.                                                                  |
+| `--codec <c>`          | `h264`                         | `h264 \| h265 \| vp9 \| vp8 \| av1`. Falls back automatically if unsupported. |
+| `--container <c>`      | derived                        | `mp4 \| webm \| mov \| mkv` (or `mp3 \| wav \| m4a` with `--audio-only`).     |
+| `--resolution <WxH>`   | project metadata               | e.g. `1920x1080`.                                                             |
+| `--fps <n>`            | project metadata               |                                                                               |
+| `--quality <q>`        | `high`                         | `low \| medium \| high \| ultra` (controls bitrate).                          |
+| `--in <sec>`           | 0                              | Render range start (seconds).                                                 |
+| `--out-sec <sec>`      | end                            | Render range end (seconds).                                                   |
+| `--duration <sec>`     | —                              | Render this many seconds from `--in`.                                         |
+| `--audio-only`         | off                            | Render audio only.                                                            |
+| `--build`              | off                            | Build `dist/` first if the harness isn't built.                               |
+| `--head`               | off                            | Run a visible browser for debugging.                                          |
+| `--harness-url <url>`  | —                              | Dev mode: drive a running `npm run dev` server instead of `dist/`.            |
+
+## Fast iteration: single-frame grab & layout dump
+
+When you're hand-authoring a `project.json` and just need to check _where things
+landed_, don't render a clip and extract a frame with ffmpeg — that's the slow
+loop. Two lighter tools drive the same engine:
+
+### `frame.mjs` — one frame straight to PNG
+
+Renders a single composited frame (video + images + text + shapes + effects +
+transitions) directly to an image. No muxer, no video encoder, no audio
+pipeline — just the frame, so it returns in a fraction of the time a short clip
+export takes.
+
+```bash
+# Full-res PNG at 12.5s
+npm run headless:frame -- --workspace "<ws>" --project <id> --at 12.5 --out shot.png
+
+# By frame index, as a smaller JPG
+node headless/frame.mjs --workspace "<ws>" --project <id> --frame 300 \
+  --format jpg --width 960 --out shot.jpg
+```
+
+| Flag                     | Default                       | Notes                                  |
+| ------------------------ | ----------------------------- | -------------------------------------- |
+| `--at <sec>`             | 0                             | Time to grab (seconds).                |
+| `--frame <n>`            | —                             | Frame index (overrides `--at`).        |
+| `--out <path>`           | `headless/output/frame.<ext>` | Output image.                          |
+| `--format <f>`           | `png`                         | `png \| jpg \| webp`.                  |
+| `--width`/`--height <n>` | project resolution            | Output size (full quality by default). |
+| `--quality <0..1>`       | 1                             | Encoder quality for jpg/webp.          |
+
+Then just `Read` the PNG. GPU effects/transitions still need WebGPU (same as a
+full render); text/shapes/video composite without it.
+
+### `layout.mjs` — computed bounding boxes as JSON (no render)
+
+Dumps the resolved on-canvas box of every visible item at a frame, using the
+**exact transform resolver the export path uses** — so the coordinates match
+what a render would draw. No GPU, no media decode; it's pure transform math and
+returns near-instantly. Use it to trust coordinates _without_ rendering.
+
+```bash
+npm run headless:layout -- --workspace "<ws>" --project <id> --at 12.5
+# → prints JSON to stdout; pipe it:
+node headless/layout.mjs --workspace "<ws>" --project <id> --at 12.5 \
+  | jq '.items[] | select(.type=="text") | {id, text, x, y, width, height}'
+```
+
+Each item reports `{ id, type, trackId, from, durationInFrames, x, y, width,
+height, opacity, rotation, cornerRadius, visible, z }` (text items also carry
+`text`, `textAlign`, `verticalAlign`, `fontSize`). Coordinates are canvas-space
+**top-left corners** (origin top-left, +x right, +y down). `z` is draw order —
+**higher `z` composites on top**. Two items on one track with overlapping time
+both appear here; the one with the larger `z` is drawn last (on top), which is
+why a full-canvas opaque clip can hide another on the same track.
+
+> Note: both tools call new methods on `window.freecut` defined in
+> `src/headless/main.ts`, so rebuild `dist/` after pulling harness changes
+> (`npm run build`, or pass `--build`).
 
 ## Notes & limitations
 
@@ -131,23 +192,23 @@ Safe by default: with neither `--out` nor `--in-place` it's a dry run.
 
 `edits.json` is an array of ops (each `{ "op": "<name>", ... }`):
 
-| op | fields |
-|----|--------|
-| `addText` | `text`, `from`, `durationInFrames`, `trackId?`, `color?`, `fontSize?`, `fontWeight?`, `textAlign?`, `verticalAlign?` |
-| `addItem` | `item` (a full `TimelineItem`) |
-| `updateItem` | `id`, `updates` (partial `TimelineItem`) |
-| `moveItem` | `id`, `from`, `trackId?` |
-| `removeItems` | `ids` (array) |
-| `split` | `id`, `frame` |
-| `trimStart` / `trimEnd` | `id`, `amount` |
-| `addTransition` | `leftClipId`, `rightClipId`, `type?`, `durationInFrames?` |
-| `addClip` | `mediaId`, `from`, `trackId?`, `durationInFrames?` (video adds a linked audio companion; source range computed from the media's metadata) |
-| `addTrack` | `kind?` (`video`\|`audio`), `order?` |
-| `addKeyframe` | `itemId`, `property`, `frame`, `value`, `easing?` |
-| `removeKeyframes` | `itemId`, `property` |
-| `addEffect` | `itemId`, `gpuEffectType` + `params?` (or a full `effect` object) |
-| `removeEffect` | `itemId`, `effectId` |
-| `setTransform` | `id`, `transform` (e.g. `{ "x": 0, "y": 150, "opacity": 0.5, "rotation": 0 }`) |
+| op                      | fields                                                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `addText`               | `text`, `from`, `durationInFrames`, `trackId?`, `color?`, `fontSize?`, `fontWeight?`, `textAlign?`, `verticalAlign?`                      |
+| `addItem`               | `item` (a full `TimelineItem`)                                                                                                            |
+| `updateItem`            | `id`, `updates` (partial `TimelineItem`)                                                                                                  |
+| `moveItem`              | `id`, `from`, `trackId?`                                                                                                                  |
+| `removeItems`           | `ids` (array)                                                                                                                             |
+| `split`                 | `id`, `frame`                                                                                                                             |
+| `trimStart` / `trimEnd` | `id`, `amount`                                                                                                                            |
+| `addTransition`         | `leftClipId`, `rightClipId`, `type?`, `durationInFrames?`                                                                                 |
+| `addClip`               | `mediaId`, `from`, `trackId?`, `durationInFrames?` (video adds a linked audio companion; source range computed from the media's metadata) |
+| `addTrack`              | `kind?` (`video`\|`audio`), `order?`                                                                                                      |
+| `addKeyframe`           | `itemId`, `property`, `frame`, `value`, `easing?`                                                                                         |
+| `removeKeyframes`       | `itemId`, `property`                                                                                                                      |
+| `addEffect`             | `itemId`, `gpuEffectType` + `params?` (or a full `effect` object)                                                                         |
+| `removeEffect`          | `itemId`, `effectId`                                                                                                                      |
+| `setTransform`          | `id`, `transform` (e.g. `{ "x": 0, "y": 150, "opacity": 0.5, "rotation": 0 }`)                                                            |
 
 `addClip` reads the media's `metadata.json` (passed automatically by the CLI),
 so its source range, fps, and audio companion match an in-app import.
@@ -176,17 +237,26 @@ curl -X POST localhost:8787/render -H 'content-type: application/json' \
   -d '{"project":"<id>","codec":"vp9","duration":5}' -o out.webm
 curl -X POST localhost:8787/edit -H 'content-type: application/json' \
   -d '{"project":"<id>","ops":[{"op":"addText","text":"Hi","from":0}]}'
+
+# fast iteration on a warm page (see frame.mjs / layout.mjs above):
+curl -X POST localhost:8787/frame -H 'content-type: application/json' \
+  -d '{"project":"<id>","at":12.5}' -o shot.png
+curl -s -X POST localhost:8787/layout -H 'content-type: application/json' \
+  -d '{"project":"<id>","at":12.5}' | jq '.items[] | select(.type=="text")'
 ```
 
-| Route | Body | Returns |
-|-------|------|---------|
-| `GET /health` | — | `{ ok, gpu: { available, vendor, architecture }, software, harnessUrl }` |
-| `GET /projects` | — | `[{ id, name, updatedAt }]` |
-| `POST /render` | `{ project\|projectObject, codec?, container?, resolution?, fps?, quality?, in?, outSec?, duration?, audioOnly? }` | the rendered file (attachment) |
-| `POST /edit` | `{ project\|projectObject, ops, ... }` | `{ ok, project, applied, results }` |
+| Route           | Body                                                                                                               | Returns                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `GET /health`   | —                                                                                                                  | `{ ok, gpu: { available, vendor, architecture }, software, harnessUrl }` |
+| `GET /projects` | —                                                                                                                  | `[{ id, name, updatedAt }]`                                              |
+| `POST /render`  | `{ project\|projectObject, codec?, container?, resolution?, fps?, quality?, in?, outSec?, duration?, audioOnly? }` | the rendered file (attachment)                                           |
+| `POST /edit`    | `{ project\|projectObject, ops, ... }`                                                                             | `{ ok, project, applied, results }`                                      |
+| `POST /frame`   | `{ project\|projectObject, at?\|frame?, width?, height?, format?, quality? }`                                      | one composited frame image (attachment; full-res PNG by default)         |
+| `POST /layout`  | `{ project\|projectObject, at?\|frame? }`                                                                          | `{ frame, atSeconds, canvas, items[] }` (computed boxes, no render)      |
 
 `project` is a workspace project id; `projectObject` is an inline Project JSON.
-Media is resolved from the service's workspace by id.
+Media is resolved from the service's workspace by id. On a warm page, `/layout`
+returns in well under 100 ms (no render); `/frame` skips the Chrome cold start.
 
 ## Docker (Linux GPU server deployment)
 

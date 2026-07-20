@@ -91,7 +91,9 @@ async function main() {
 
   console.log('\nApplied ops:')
   for (const r of result.results) {
-    console.log(`  ${r.ok ? 'ok ' : 'ERR'} ${r.op}${r.detail ? ' ' + JSON.stringify(r.detail) : ''}`)
+    console.log(
+      `  ${r.ok ? 'ok ' : 'ERR'} ${r.op}${r.detail ? ' ' + JSON.stringify(r.detail) : ''}`,
+    )
   }
   const edited = result.project
   const itemCount = edited.timeline?.items?.length ?? 0

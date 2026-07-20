@@ -68,7 +68,10 @@ export async function createMediaServer(mediaFilesOrResolver, port = 0) {
     }
 
     const { size } = await stat(filePath)
-    res.setHeader('Content-Type', MIME[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream')
+    res.setHeader(
+      'Content-Type',
+      MIME[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream',
+    )
     res.setHeader('Accept-Ranges', 'bytes')
 
     const range = req.headers.range

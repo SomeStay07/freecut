@@ -98,7 +98,9 @@ async function main() {
       const pct = Math.floor(progress?.progress ?? 0)
       if (pct !== lastPct) {
         lastPct = pct
-        process.stdout.write(`\r  ${progressLabel} ${(progress?.phase ?? 'render').padEnd(10)} ${pct}%   `)
+        process.stdout.write(
+          `\r  ${progressLabel} ${(progress?.phase ?? 'render').padEnd(10)} ${pct}%   `,
+        )
       }
     })
 

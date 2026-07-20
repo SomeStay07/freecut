@@ -72,7 +72,10 @@ async function serveFile(req, res, filePath, { allowRange } = { allowRange: fals
     let end = parts?.[2] ? Number.parseInt(parts[2], 10) : size - 1
     if (!Number.isFinite(start) || start < 0) start = 0
     if (!Number.isFinite(end) || end >= size) end = size - 1
-    res.writeHead(206, { 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 })
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${size}`,
+      'Content-Length': end - start + 1,
+    })
     if (req.method === 'HEAD') return res.end()
     fs.createReadStream(filePath, { start, end }).pipe(res)
     return
