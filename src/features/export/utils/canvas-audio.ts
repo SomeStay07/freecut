@@ -283,7 +283,10 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
   transitions: Transition[],
   fps: number,
 ): AudioSegment[] {
-  if (entriesById.size === 0 || transitions.length === 0) return []
+  // Entries that don't participate in any transition still yield plain segments below
+  // (zero extensions) — bailing out on empty `transitions` would silently drop the
+  // embedded audio of every video item in compositions without transitions.
+  if (entriesById.size === 0) return []
 
   const extensionByClipId = new Map<
     string,
@@ -1015,9 +1018,7 @@ export function extractAudioSegments(
   return segments
 }
 
-type MediabunnyAudioSampleSink = InstanceType<
-  (typeof import('mediabunny'))['AudioSampleSink']
->
+type MediabunnyAudioSampleSink = InstanceType<(typeof import('mediabunny'))['AudioSampleSink']>
 type MediabunnyAudioSample = InstanceType<(typeof import('mediabunny'))['AudioSample']>
 
 interface AudioDecodeAccumulator {
@@ -2112,11 +2113,7 @@ interface AudioWindowIntersection {
 }
 
 interface WindowedAudioDecoderPool {
-  decode: (
-    segment: AudioSegment,
-    startTime: number,
-    endTime: number,
-  ) => Promise<DecodedAudio>
+  decode: (segment: AudioSegment, startTime: number, endTime: number) => Promise<DecodedAudio>
   dispose: () => Promise<void>
 }
 
