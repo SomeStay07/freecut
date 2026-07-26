@@ -672,7 +672,9 @@ self.onmessage = async (event: MessageEvent) => {
       msg.timestamp,
       msg.blob,
       msg.sourceMetadata,
-      isActivePreviewRequest ? () => activePreviewGeneration === Number(msg.generation) : undefined,
+      isActivePreviewRequest
+        ? () => activePreviewGeneration === Number(msg.generation)
+        : undefined,
     )
     if (isActivePreviewRequest) {
       self.postMessage({

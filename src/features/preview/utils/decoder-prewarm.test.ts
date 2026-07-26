@@ -41,7 +41,10 @@ class MockWorker {
   readonly addEventListener = vi.fn()
   readonly terminate = vi.fn()
   readonly postMessage = vi.fn((message: MockWorkerMessage) => {
-    if ((message.type !== 'preseek' && message.type !== 'active_preseek') || !autoRespondPreseek) {
+    if (
+      (message.type !== 'preseek' && message.type !== 'active_preseek') ||
+      !autoRespondPreseek
+    ) {
       return
     }
 
@@ -224,8 +227,7 @@ describe('decoder prewarm', () => {
     expect(activeWorker.terminate).toHaveBeenCalledTimes(1)
 
     await vi.waitFor(() => {
-      const posts = createdWorkers
-        .flatMap((worker) => worker.postMessage.mock.calls)
+      const posts = createdWorkers.flatMap((worker) => worker.postMessage.mock.calls)
         .map(([message]) => message as MockWorkerMessage)
         .filter((message) => message.type === 'active_preseek')
       expect(posts.map((message) => message.timestamp)).toEqual([10, 20, 30])

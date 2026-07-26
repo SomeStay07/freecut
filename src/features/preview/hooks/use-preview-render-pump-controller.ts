@@ -25,7 +25,10 @@ import { getDirectionalPrewarmOffsets } from '../utils/fast-scrub-prewarm'
 import { resolveProxyUrl } from '../utils/media-resolver'
 import { scheduleScrubProxyFallback } from '../utils/scrub-proxy-fallback'
 import { shouldShowFastScrubOverlay } from '../utils/fast-scrub-overlay-guard'
-import { hasPendingPreviewInput, yieldToPendingPreviewInput } from '../utils/preview-input-yield'
+import {
+  hasPendingPreviewInput,
+  yieldToPendingPreviewInput,
+} from '../utils/preview-input-yield'
 import { resolvePlaybackTransitionOverlayState } from '../utils/playback-transition-overlay'
 import {
   FAST_SCRUB_DIRECTIONAL_PREWARM_BACKWARD_STEPS,
@@ -371,12 +374,7 @@ export function usePreviewRenderPump({
       }
       const context = committedPreviewSnapshotCanvas.getContext('2d')
       if (!context) return
-      context.clearRect(
-        0,
-        0,
-        committedPreviewSnapshotCanvas.width,
-        committedPreviewSnapshotCanvas.height,
-      )
+      context.clearRect(0, 0, committedPreviewSnapshotCanvas.width, committedPreviewSnapshotCanvas.height)
       context.drawImage(displayCanvas, 0, 0)
       committedPreviewSnapshotFrame = frame
     }
@@ -394,7 +392,9 @@ export function usePreviewRenderPump({
         let rgbTotal = 0
         for (let index = 0; index < pixels.length; index += 4) {
           rgbTotal +=
-            (pixels.at(index) ?? 0) + (pixels.at(index + 1) ?? 0) + (pixels.at(index + 2) ?? 0)
+            (pixels.at(index) ?? 0) +
+            (pixels.at(index + 1) ?? 0) +
+            (pixels.at(index + 2) ?? 0)
           if (rgbTotal > 8) return false
         }
         return true
@@ -628,7 +628,10 @@ export function usePreviewRenderPump({
     const scheduleScrubPrewarmIdleRestart = (minimumDelayMs = 0) => {
       cancelScrubPrewarmIdleRestart()
       const elapsedSinceInput = performance.now() - lastScrubTargetAtMs
-      const remainingDelay = Math.max(minimumDelayMs, scrubPrewarmIdleDelayMs - elapsedSinceInput)
+      const remainingDelay = Math.max(
+        minimumDelayMs,
+        scrubPrewarmIdleDelayMs - elapsedSinceInput,
+      )
       scrubPrewarmIdleTimeoutId = setTimeout(() => {
         scrubPrewarmIdleTimeoutId = null
         if (!scrubMountedRef.current || scrubPrewarmQueueRef.current.length === 0) return
@@ -888,7 +891,10 @@ export function usePreviewRenderPump({
             const renderStartMs = performance.now()
             recordPreviewScrubRenderStarted(frameToRender)
             await renderer.renderFrame(frameToRender)
-            if ('wasLastRenderAborted' in renderer && renderer.wasLastRenderAborted?.()) {
+            if (
+              'wasLastRenderAborted' in renderer &&
+              renderer.wasLastRenderAborted?.()
+            ) {
               recordPreviewScrubRenderCompleted(frameToRender)
               // The renderer clears the shared offscreen canvas before it can
               // discover that a nested source is still settling. Never leave
@@ -898,7 +904,8 @@ export function usePreviewRenderPump({
               continue
             }
             priorityRenderUsedFallback =
-              'wasLastRenderFallback' in renderer && renderer.wasLastRenderFallback?.() === true
+              'wasLastRenderFallback' in renderer &&
+              renderer.wasLastRenderFallback?.() === true
             // Don't check isStale() here — the priority frame is fully rendered
             // and should always be displayed. Discarding it wastes the decode work
             // and reduces scrub hit rate.
@@ -1154,7 +1161,10 @@ export function usePreviewRenderPump({
               scheduleOpportunisticTransitionPrepare()
             }
             prewarmBudgetStart = performance.now()
-            if (playbackState.previewFrame !== null && scrubPrewarmQueueRef.current.length > 0) {
+            if (
+              playbackState.previewFrame !== null &&
+              scrubPrewarmQueueRef.current.length > 0
+            ) {
               // Directional decode lookahead shares the same renderer lane as
               // the visible target. Do not enter an uninterruptible prewarm
               // await while pointer input is active; restart after an adaptive
@@ -1398,10 +1408,10 @@ export function usePreviewRenderPump({
       }
 
       const bySource = collectVisibleTrackVideoSourceTimesBySrc(combinedTracks, targetFrame, fps, {
-        requireExplicitSourceFps: true,
-        resolveComposition: resolvePreseekComposition,
-        resolveItemSrc: resolvePreseekItemSrc,
-      })
+          requireExplicitSourceFps: true,
+          resolveComposition: resolvePreseekComposition,
+          resolveItemSrc: resolvePreseekItemSrc,
+        })
       recordPreviewPreseekPlan(targetFrame, bySource)
       runBatchPreseek(bySource)
     }
@@ -1475,7 +1485,9 @@ export function usePreviewRenderPump({
         resolveComposition: resolvePreseekComposition,
         resolveItemSrc: resolvePreseekItemSrc,
       })
-      const primarySource = bySource.entries().next().value as [string, number[]] | undefined
+      const primarySource = bySource.entries().next().value as
+        | [string, number[]]
+        | undefined
       if (!primarySource) return
 
       const [src, timestamps] = primarySource
@@ -1897,7 +1909,10 @@ export function usePreviewRenderPump({
         // moments (resize/workspace/layout changes), while the visible canvas
         // remains the authoritative frame the hover must return to.
         captureCommittedPreviewSnapshot(prev.currentFrame)
-      } else if (state.previewFrame !== null && state.previewFrame !== prev.previewFrame) {
+      } else if (
+        state.previewFrame !== null &&
+        state.previewFrame !== prev.previewFrame
+      ) {
         scrubTargetsInGesture += 1
       }
       if (
@@ -2064,8 +2079,7 @@ export function usePreviewRenderPump({
             prevTargetFrame === null
               ? 0
               : Math.abs(activePreviewPresentationTarget - prevTargetFrame),
-          elapsedMs:
-            lastScrubTargetAtMs === 0 ? Number.POSITIVE_INFINITY : nowMs - lastScrubTargetAtMs,
+          elapsedMs: lastScrubTargetAtMs === 0 ? Number.POSITIVE_INFINITY : nowMs - lastScrubTargetAtMs,
           fps,
         })
         lastScrubTargetAtMs = nowMs

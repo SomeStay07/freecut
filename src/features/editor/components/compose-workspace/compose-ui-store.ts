@@ -24,7 +24,8 @@ export const useComposeUiStore = create<ComposeUiState>((set) => ({
         ? state
         : { motionReturnTabCaptured: true, motionReturnTabId: tabId },
     ),
-  clearMotionReturnTab: () => set({ motionReturnTabCaptured: false, motionReturnTabId: null }),
+  clearMotionReturnTab: () =>
+    set({ motionReturnTabCaptured: false, motionReturnTabId: null }),
   toggleLayerExpanded: (compositionId, itemId) =>
     set((state) => {
       const current = state.expandedLayerIdsByComposition[compositionId] ?? []

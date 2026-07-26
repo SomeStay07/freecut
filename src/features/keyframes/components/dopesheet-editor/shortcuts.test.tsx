@@ -1,19 +1,19 @@
-import { fireEvent, render } from '@testing-library/react'
-import { beforeAll, describe, expect, it, vi } from 'vite-plus/test'
-import { DopesheetEditor } from './index'
+import { fireEvent, render } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { DopesheetEditor } from "./index";
 
-describe('DopesheetEditor shortcuts', () => {
+describe("DopesheetEditor shortcuts", () => {
   beforeAll(() => {
     class ResizeObserverMock {
       observe() {}
       unobserve() {}
       disconnect() {}
     }
-    vi.stubGlobal('ResizeObserver', ResizeObserverMock)
-  })
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+  });
 
-  it('toggles a keyframe through the active property handler', () => {
-    const onAddKeyframe = vi.fn()
+  it("toggles a keyframe through the active property handler", () => {
+    const onAddKeyframe = vi.fn();
 
     render(
       <DopesheetEditor
@@ -26,22 +26,22 @@ describe('DopesheetEditor shortcuts', () => {
         onAddKeyframe={onAddKeyframe}
         shortcutsEnabled
         shortcuts={{
-          toggleKeyframe: 'k',
-          previousKeyframe: 'alt+bracketleft',
-          nextKeyframe: 'alt+bracketright',
-          toggleAutoKey: 'a',
-          fitKeyframes: 'f',
+          toggleKeyframe: "k",
+          previousKeyframe: "alt+bracketleft",
+          nextKeyframe: "alt+bracketright",
+          toggleAutoKey: "a",
+          fitKeyframes: "f",
         }}
       />,
-    )
+    );
 
-    fireEvent.keyDown(document, { key: 'k', code: 'KeyK' })
+    fireEvent.keyDown(document, { key: "k", code: "KeyK" });
 
-    expect(onAddKeyframe).toHaveBeenCalledWith('x', 24)
-  })
+    expect(onAddKeyframe).toHaveBeenCalledWith("x", 24);
+  });
 
-  it('does not fire editor shortcuts while they are out of scope', () => {
-    const onAddKeyframe = vi.fn()
+  it("does not fire editor shortcuts while they are out of scope", () => {
+    const onAddKeyframe = vi.fn();
 
     render(
       <DopesheetEditor
@@ -54,17 +54,17 @@ describe('DopesheetEditor shortcuts', () => {
         onAddKeyframe={onAddKeyframe}
         shortcutsEnabled={false}
         shortcuts={{
-          toggleKeyframe: 'k',
-          previousKeyframe: 'alt+bracketleft',
-          nextKeyframe: 'alt+bracketright',
-          toggleAutoKey: 'a',
-          fitKeyframes: 'f',
+          toggleKeyframe: "k",
+          previousKeyframe: "alt+bracketleft",
+          nextKeyframe: "alt+bracketright",
+          toggleAutoKey: "a",
+          fitKeyframes: "f",
         }}
       />,
-    )
+    );
 
-    fireEvent.keyDown(document, { key: 'k', code: 'KeyK' })
+    fireEvent.keyDown(document, { key: "k", code: "KeyK" });
 
-    expect(onAddKeyframe).not.toHaveBeenCalled()
-  })
-})
+    expect(onAddKeyframe).not.toHaveBeenCalled();
+  });
+});

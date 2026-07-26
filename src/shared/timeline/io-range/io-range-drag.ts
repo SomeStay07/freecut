@@ -1,5 +1,8 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { useIoRangeReadoutStore, type IoDragReadout } from './io-range-readout-store'
+import {
+  useIoRangeReadoutStore,
+  type IoDragReadout,
+} from './io-range-readout-store'
 
 /**
  * Start a pointer drag for an IO marker / range strip.
@@ -37,11 +40,11 @@ export function beginIoPointerDrag(
 
   const publish = (clientX: number, clientY: number) => {
     const update = onMove(clientX)
-    useIoRangeReadoutStore
-      .getState()
-      .setReadout(
-        typeof update === 'string' ? { label: update, x: clientX, y: clientY } : (update ?? null),
-      )
+    useIoRangeReadoutStore.getState().setReadout(
+      typeof update === 'string'
+        ? { label: update, x: clientX, y: clientY }
+        : (update ?? null),
+    )
   }
 
   // Function declarations (hoisted) so move/end/cleanup can reference each other.

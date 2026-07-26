@@ -1264,7 +1264,9 @@ export function repairCompositeCompositionEditorialLeak(params: {
 
   const editorialItemIdSet = new Set(params.editorialItemIds)
   const leakedItemIds = new Set(
-    composition.items.filter((item) => editorialItemIdSet.has(item.id)).map((item) => item.id),
+    composition.items
+      .filter((item) => editorialItemIdSet.has(item.id))
+      .map((item) => item.id),
   )
   if (leakedItemIds.size === 0) return 0
 
@@ -1283,7 +1285,9 @@ export function repairCompositeCompositionEditorialLeak(params: {
     (transition) =>
       !leakedItemIds.has(transition.leftClipId) && !leakedItemIds.has(transition.rightClipId),
   )
-  const keyframes = composition.keyframes.filter((entry) => !leakedItemIds.has(entry.itemId))
+  const keyframes = composition.keyframes.filter(
+    (entry) => !leakedItemIds.has(entry.itemId),
+  )
   const contentEnd = items.reduce(
     (maximum, item) => Math.max(maximum, item.from + item.durationInFrames),
     1,

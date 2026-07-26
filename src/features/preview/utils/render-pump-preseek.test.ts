@@ -575,9 +575,14 @@ describe('compound clip preseek recursion', () => {
       durationInFrames: 300,
     })
 
-    const result = collectVisibleTrackVideoSourceTimesBySrc([makeMixedTrack([outer])], 190, 30, {
-      resolveComposition: () => ({ fps: 30, items: [nestedCycle] }),
-    })
+    const result = collectVisibleTrackVideoSourceTimesBySrc(
+      [makeMixedTrack([outer])],
+      190,
+      30,
+      {
+        resolveComposition: () => ({ fps: 30, items: [nestedCycle] }),
+      },
+    )
 
     expect(result.size).toBe(0)
   })

@@ -42,7 +42,10 @@ import {
 } from '../utils/preview-display-canvas'
 import { setActivePreviewScrubbingCache } from '../utils/preview-scrubbing-cache-bridge'
 import { warmDecoderPrewarmWorkerPool } from '../utils/decoder-prewarm'
-import { disposeScrubProxyFallback, warmScrubProxyFallback } from '../utils/scrub-proxy-fallback'
+import {
+  disposeScrubProxyFallback,
+  warmScrubProxyFallback,
+} from '../utils/scrub-proxy-fallback'
 import { collectVisualInvalidationRanges } from '../utils/preview-frame-invalidation'
 import { resolvePreviewCaptureFrame } from '../utils/preview-capture-frame'
 import {
@@ -479,9 +482,9 @@ export function usePreviewRendererController({
       getPreviewPathVerticesOverride,
       getPreviewTransformOverride,
       isResolving,
-      renderSize.height,
-      renderSize.width,
-    ])
+        renderSize.height,
+        renderSize.width,
+      ])
 
   const ensureFastScrubRenderer =
     useCallback(async (): Promise<PreviewCompositionRenderer | null> => {
@@ -634,10 +637,10 @@ export function usePreviewRendererController({
       scrubOffscreenCtxRef,
       scrubOffscreenRenderedFrameRef,
       scrubPreloadPromiseRef,
-      scrubRendererRef,
-      scrubRendererStructureKeyRef,
-      scrubRequestedFrameRef,
-    ])
+        scrubRendererRef,
+        scrubRendererStructureKeyRef,
+        scrubRequestedFrameRef,
+      ])
   ensureFastScrubRendererRef.current = ensureFastScrubRenderer
 
   // Captures share the offscreen canvas (and renderer) with the render pump.

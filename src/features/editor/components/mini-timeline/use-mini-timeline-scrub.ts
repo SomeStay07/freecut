@@ -156,7 +156,13 @@ export function useMiniTimelineScrub({
         setCompositionVisualFrozen(false)
       }
     },
-    [cancelScrubRaf, clientXToFrame, finishScrub, setCompositionVisualFrozen, setPreviewFrame],
+    [
+      cancelScrubRaf,
+      clientXToFrame,
+      finishScrub,
+      setCompositionVisualFrozen,
+      setPreviewFrame,
+    ],
   )
 
   const onPointerCancel = useCallback(

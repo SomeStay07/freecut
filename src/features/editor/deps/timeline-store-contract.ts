@@ -5,7 +5,9 @@
 
 export type { TimelineState, TimelineActions } from '@/features/timeline/types'
 export type { MotionPresetClear } from '@/features/timeline/stores/actions/keyframe-actions'
-export { useTimelineStore } from '@/features/timeline/stores/timeline-store'
+export {
+  useTimelineStore,
+} from '@/features/timeline/stores/timeline-store'
 export { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
 export { useItemsStore } from '@/features/timeline/stores/items-store'
 export { useKeyframesStore } from '@/features/timeline/stores/keyframes-store'
@@ -21,7 +23,9 @@ export { rateStretchItemWithoutHistory } from '@/features/timeline/stores/action
 export { repairCompositeCompositionEditorialLeak } from '@/features/timeline/stores/actions/composition-actions'
 export { setInOutPointsWithoutHistory } from '@/features/timeline/stores/actions/marker-actions'
 export { applyAnimationPreset } from '@/features/timeline/stores/actions/preset-actions'
-export { applyMotionPresetKeyframes } from '@/features/timeline/stores/actions/keyframe-actions'
+export {
+  applyMotionPresetKeyframes,
+} from '@/features/timeline/stores/actions/keyframe-actions'
 export {
   applyMotionModifierToItems,
   updateMotionModifiersLive,

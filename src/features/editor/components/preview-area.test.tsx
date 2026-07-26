@@ -202,7 +202,9 @@ describe('PreviewArea mask editor toolbar', () => {
   })
 
   it('preserves the program preview DOM while switching workspace chrome', () => {
-    const { rerender } = render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
+    const { rerender } = render(
+      <PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />,
+    )
     const previewNode = screen.getByTestId('video-preview')
 
     act(() => {
