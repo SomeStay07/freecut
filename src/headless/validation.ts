@@ -89,7 +89,7 @@ export function videoCarriesAudio(
   return !metadata || Boolean(metadata.audioCodec)
 }
 
-export function itemCanCarryAudio(
+function itemCanCarryAudio(
   item: CompositionInputProps['tracks'][number]['items'][number],
   mediaById: Map<string, MediaMetadata>,
 ): boolean {
