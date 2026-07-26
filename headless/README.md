@@ -129,10 +129,30 @@ npm run headless -- --workspace "<ws>" --list --json
 | `--out-sec <sec>`       | end                            | Render range end (seconds).                                                                    |
 | `--duration <sec>`      | —                              | Render this many seconds from `--in`.                                                          |
 | `--audio-only`          | off                            | Render audio only.                                                                             |
+| `--strict`              | off                            | Fail BEFORE rendering on any project validation warning (see below).                           |
 | `--allow-missing-media` | off                            | Permissive human workflow: render gaps for missing sources and emit a `MISSING_MEDIA` warning. |
 | `--build`               | off                            | Build `dist/` first if the harness isn't built.                                                |
 | `--head`                | off                            | Run a visible browser for debugging.                                                           |
 | `--harness-url <url>`   | —                              | Dev mode: drive a running `npm run dev` server instead of `dist/`.                             |
+
+### Project validation warnings (silent-failure guards)
+
+Programmatically-built projects fail silently in ways the editor UI would make
+obvious. On every load (`render`, `frame`, `layout`) the harness reports:
+
+- `TRACK_OVERLAP_REPAIRED` — two items overlap on one track; normalization
+  silently SHIFTS the later one (it doesn't drop it), which reads as "my item
+  vanished from its window". The warning names both ids and the frames.
+- `SHAPE_MISSING_TYPE` — a `shape` item without `shapeType` passes schema
+  validation but renders nothing.
+- `SOURCE_RANGE_EXCEEDED` — an item's cut runs past the end of its media; the
+  tail renders black/silent.
+- `NO_AUDIO_IN_MIX` — the composition contains items with audio but the final
+  mix has zero audible segments (the output would have no audio track at all).
+
+Warnings are logged, included in the JSON summaries (`warnings` array, also in
+the `layout` result), and `--strict` turns any of them into a hard failure
+before rendering starts. `frame.mjs` / `layout.mjs` accept `--strict` too.
 
 ## Fast iteration: single-frame grab & layout dump
 

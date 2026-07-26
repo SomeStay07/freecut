@@ -26,6 +26,7 @@ import type { ItemEffect } from '@/types/effects'
 
 import { createLogger } from '@/shared/logging/logger'
 import { CURRENT_SCHEMA_VERSION, migrateProject } from '@/shared/projects/migrations'
+import type { ProjectWarning } from '@/shared/projects/migrations'
 import {
   DEFAULT_PROJECT_FPS,
   DEFAULT_PROJECT_HEIGHT,
@@ -57,6 +58,8 @@ import {
 } from '@/features/export/deps/timeline-compositions'
 import { editProject } from './edit'
 import { seedMediaLibrary } from './seed-media'
+import { collectSourceRangeFindings } from './validation'
+import { hasAudioContent } from '@/features/export/utils/canvas-audio'
 import { ensureFontsLoaded } from '@/shared/typography/font-loader'
 import { collectVisibleTextFontFamilies } from '@/runtime/composition-runtime/utils/scene-assembly'
 
@@ -97,6 +100,10 @@ interface HeadlessTimelineInput {
   media?: HeadlessMediaSource[]
   settings: ClientExportSettings
   outputFileName?: string
+  /** Fail before rendering if any validation warning was collected. */
+  strict?: boolean
+  /** Load-time validation findings collected by the caller (renderProject). */
+  validationWarnings?: HeadlessRenderWarning[]
 }
 
 /** Render a full Project object (runs migrations, then extracts the timeline). */
@@ -114,6 +121,8 @@ interface HeadlessProjectInput {
   inPoint?: number | null
   outPoint?: number | null
   outputFileName?: string
+  /** Fail before rendering if any validation warning was collected. */
+  strict?: boolean
 }
 
 interface HeadlessRenderSummary {
@@ -129,9 +138,93 @@ interface HeadlessRenderSummary {
 }
 
 interface HeadlessRenderWarning {
-  code: 'CODEC_FALLBACK' | 'WEBGPU_TRANSITION_FALLBACK'
+  code:
+    | 'CODEC_FALLBACK'
+    | 'WEBGPU_TRANSITION_FALLBACK'
+    | 'NO_AUDIO_IN_MIX'
+    | ProjectWarning['code']
+    | 'SOURCE_RANGE_EXCEEDED'
   message: string
   details?: Record<string, unknown>
+}
+
+function projectWarningsToHeadless(warnings: ProjectWarning[]): HeadlessRenderWarning[] {
+  return warnings.map((w) => ({
+    code: w.code,
+    message: w.message,
+    details: {
+      ...(w.itemIds ? { itemIds: w.itemIds } : {}),
+      ...(w.trackId ? { trackId: w.trackId } : {}),
+      ...(w.compositionId ? { compositionId: w.compositionId } : {}),
+    },
+  }))
+}
+
+function buildMediaMetadataMap(
+  media: HeadlessMediaSource[] | undefined,
+): Map<string, MediaMetadata> {
+  const mediaById = new Map<string, MediaMetadata>()
+  for (const m of media ?? []) {
+    if (m.metadata) mediaById.set(m.mediaId, m.metadata)
+  }
+  return mediaById
+}
+
+/** Source-overrun findings for top-level and sub-composition items. */
+function sourceRangeWarnings(
+  items: readonly TimelineItem[],
+  compositions: readonly SubComposition[] | undefined,
+  mediaById: Map<string, MediaMetadata>,
+  fps: number,
+): HeadlessRenderWarning[] {
+  const allItems = [
+    ...items,
+    ...(compositions ?? []).flatMap((comp) => (comp.items ?? []) as TimelineItem[]),
+  ]
+  return collectSourceRangeFindings(allItems, mediaById, fps).map((f) => ({
+    code: 'SOURCE_RANGE_EXCEEDED' as const,
+    message:
+      `Item "${f.itemId}" needs ${f.neededSeconds.toFixed(2)}s of media "${f.mediaId}" ` +
+      `but only ${f.availableSeconds.toFixed(2)}s exist — the tail renders black/silent`,
+    details: { ...f },
+  }))
+}
+
+/** True when any item on an unmuted, visible track can contribute audio. */
+function hasAudioCapableItems(
+  tracks: CompositionInputProps['tracks'],
+  mediaById: Map<string, MediaMetadata>,
+): boolean {
+  for (const track of tracks) {
+    if (track.visible === false || track.muted === true) continue
+    for (const item of track.items ?? []) {
+      if (item.type === 'audio') return true
+      if (item.type !== 'video') continue
+      const videoItem = item as { embeddedAudioMuted?: boolean; mediaId?: string }
+      if (videoItem.embeddedAudioMuted) continue
+      const metadata = videoItem.mediaId ? mediaById.get(videoItem.mediaId) : undefined
+      // Without metadata assume the video may carry audio; with it require an audio track.
+      if (!metadata || metadata.audioCodec) return true
+    }
+  }
+  return false
+}
+
+/** Log every validation warning; in strict mode abort before any rendering. */
+function reportValidationWarnings(
+  warnings: HeadlessRenderWarning[],
+  strict: boolean | undefined,
+  context: string,
+): void {
+  for (const w of warnings) {
+    log.warn(`[validation] ${w.message}`, { code: w.code, ...w.details })
+  }
+  if (strict && warnings.length > 0) {
+    throw new Error(
+      `Strict validation failed (${context}): ${warnings.length} warning(s) — ` +
+        warnings.map((w) => `${w.code}: ${w.message}`).join('; '),
+    )
+  }
 }
 
 type ProgressSink = (progress: RenderProgress) => void
@@ -330,6 +423,16 @@ async function renderTimeline(input: HeadlessTimelineInput): Promise<HeadlessRen
 
   const { settings, warnings } = await adaptVideoSettings(requestedSettings)
 
+  // Load-time validation: caller-collected findings (project normalization)
+  // plus source-overrun checks. Logged always; fatal before render in --strict.
+  const mediaById = buildMediaMetadataMap(media)
+  const validationWarnings = [
+    ...(input.validationWarnings ?? []),
+    ...sourceRangeWarnings(items, compositions, mediaById, fps),
+  ]
+  reportValidationWarnings(validationWarnings, input.strict, 'render')
+  warnings.unshift(...validationWarnings)
+
   const composition: CompositionInputProps = convertTimelineToComposition(
     tracks,
     items,
@@ -355,6 +458,23 @@ async function renderTimeline(input: HeadlessTimelineInput): Promise<HeadlessRen
 
   // Resolve top-level media (mediaId -> seeded blob URL). Export never uses proxies.
   composition.tracks = await resolveMediaUrls(composition.tracks, { useProxy: false })
+
+  // Silent-failure guard: items with audio present but zero audible segments in
+  // the final mix is almost always an authoring/engine bug, not intent.
+  if (settings.mode !== 'audio' && hasAudioCapableItems(composition.tracks, mediaById)) {
+    if (!(await hasAudioContent(composition))) {
+      const warning: HeadlessRenderWarning = {
+        code: 'NO_AUDIO_IN_MIX',
+        message:
+          'Composition contains items with audio, but the final mix has zero audible segments — the output file will have NO audio track',
+      }
+      log.warn(warning.message)
+      warnings.push(warning)
+      if (input.strict) {
+        throw new Error(`Strict validation failed (render): ${warning.code}: ${warning.message}`)
+      }
+    }
+  }
 
   const result =
     settings.mode === 'audio'
@@ -384,7 +504,7 @@ async function renderTimeline(input: HeadlessTimelineInput): Promise<HeadlessRen
 
 async function renderProject(input: HeadlessProjectInput): Promise<HeadlessRenderSummary> {
   const { project: rawProject, settings, media, renderWholeProject = true, outputFileName } = input
-  const { project } = migrateProject(rawProject)
+  const { project, warnings: projectWarnings } = migrateProject(rawProject)
   const timeline = project.timeline
   if (!timeline) {
     throw new Error('Project has no timeline to render')
@@ -420,6 +540,8 @@ async function renderProject(input: HeadlessProjectInput): Promise<HeadlessRende
     media,
     settings,
     outputFileName,
+    strict: input.strict,
+    validationWarnings: projectWarningsToHeadless(projectWarnings),
   })
 }
 
@@ -441,6 +563,8 @@ interface HeadlessFrameInput {
   format?: 'image/png' | 'image/jpeg' | 'image/webp'
   quality?: number
   outputFileName?: string
+  /** Fail before rendering if any validation warning was collected. */
+  strict?: boolean
 }
 
 interface HeadlessFrameSummary {
@@ -452,6 +576,7 @@ interface HeadlessFrameSummary {
   format: string
   fileSize: number
   fileName: string
+  warnings: HeadlessRenderWarning[]
 }
 
 /** Inspect the computed on-canvas layout (bounding boxes) at a frame. */
@@ -460,6 +585,8 @@ interface HeadlessLayoutInput {
   media?: HeadlessMediaSource[]
   frame?: number
   atSeconds?: number
+  /** Fail if any validation warning was collected. */
+  strict?: boolean
 }
 
 interface LayoutBox {
@@ -492,6 +619,7 @@ interface HeadlessLayoutResult {
   atSeconds: number
   canvas: { width: number; height: number; fps: number }
   items: LayoutBox[]
+  warnings: HeadlessRenderWarning[]
 }
 
 interface MigratedTimelineView {
@@ -506,15 +634,18 @@ interface MigratedTimelineView {
   backgroundColor?: string
   busAudioEq?: AudioEqSettings
   masterBusDb?: number
+  /** Non-fatal findings from project normalization (overlap repairs etc.). */
+  projectWarnings: ProjectWarning[]
 }
 
 /** Migrate a raw project and extract the fields the composition builder needs. */
 function extractTimeline(rawProject: Project): MigratedTimelineView {
-  const { project } = migrateProject(rawProject)
+  const { project, warnings: projectWarnings } = migrateProject(rawProject)
   const timeline = project.timeline
   if (!timeline) throw new Error('Project has no timeline')
   const meta = project.metadata
   return {
+    projectWarnings,
     tracks: (timeline.tracks ?? []) as unknown as TimelineTrack[],
     items: (timeline.items ?? []) as unknown as TimelineItem[],
     transitions: (timeline.transitions ?? []) as Transition[],
@@ -562,6 +693,16 @@ function buildComposition(view: MigratedTimelineView): CompositionInputProps {
 async function renderFrame(input: HeadlessFrameInput): Promise<HeadlessFrameSummary> {
   const view = extractTimeline(input.project)
   const frame = resolveTargetFrame(view, input)
+  const validationWarnings = [
+    ...projectWarningsToHeadless(view.projectWarnings),
+    ...sourceRangeWarnings(
+      view.items,
+      view.compositions,
+      buildMediaMetadataMap(input.media),
+      view.fps,
+    ),
+  ]
+  reportValidationWarnings(validationWarnings, input.strict, 'frame')
 
   useCompositionsStore.getState().setCompositions(view.compositions)
   registerMediaUrls(input.media)
@@ -605,6 +746,7 @@ async function renderFrame(input: HeadlessFrameInput): Promise<HeadlessFrameSumm
     format,
     fileSize: blob.size,
     fileName,
+    warnings: validationWarnings,
   }
 }
 
@@ -621,6 +763,16 @@ function round1(n: number): number {
 function dumpLayout(input: HeadlessLayoutInput): HeadlessLayoutResult {
   const view = extractTimeline(input.project)
   const frame = resolveTargetFrame(view, input)
+  const validationWarnings = [
+    ...projectWarningsToHeadless(view.projectWarnings),
+    ...sourceRangeWarnings(
+      view.items,
+      view.compositions,
+      buildMediaMetadataMap(input.media),
+      view.fps,
+    ),
+  ]
+  reportValidationWarnings(validationWarnings, input.strict, 'layout')
 
   // Source dimensions (video/image) feed the fit-to-canvas default, so seed the
   // media store. No blob URLs / GPU needed — this is pure transform math.
@@ -671,7 +823,7 @@ function dumpLayout(input: HeadlessLayoutInput): HeadlessLayoutResult {
     }
   }
 
-  return { frame, atSeconds: frame / view.fps, canvas, items }
+  return { frame, atSeconds: frame / view.fps, canvas, items, warnings: validationWarnings }
 }
 
 interface FreecutHeadlessApi {

@@ -77,7 +77,11 @@ async function main() {
       media,
       frame,
       atSeconds,
+      strict: Boolean(args.strict),
     })
+    for (const w of layout.warnings ?? []) {
+      console.error(`  WARNING [${w.code ?? 'UNKNOWN'}]: ${w.message}`)
+    }
 
     const json = JSON.stringify(layout, null, 2)
     if (args.out) {
