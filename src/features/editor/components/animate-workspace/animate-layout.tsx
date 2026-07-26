@@ -1,21 +1,21 @@
-import { memo, useState } from "react";
-import { useHotkeys } from "react-hotkeys-hook";
-import { ErrorBoundary } from "@/app/error-boundary";
-import { HOTKEY_OPTIONS } from "@/config/hotkeys";
-import { KeyframeGraphPanel } from "@/features/editor/deps/timeline-keyframe-ui";
-import { PreviewArea } from "../preview-area";
-import { AnimateTimelineStrip } from "./animate-timeline-strip";
-import { AnimationPresetLibrary } from "./animation-preset-library";
+import { memo, useState } from 'react'
+import { useHotkeys } from 'react-hotkeys-hook'
+import { ErrorBoundary } from '@/app/error-boundary'
+import { HOTKEY_OPTIONS } from '@/config/hotkeys'
+import { KeyframeGraphPanel } from '@/features/editor/deps/timeline-keyframe-ui'
+import { PreviewArea } from '../preview-area'
+import { AnimateTimelineStrip } from './animate-timeline-strip'
+import { AnimationPresetLibrary } from './animation-preset-library'
 
 interface AnimateLayoutProps {
   project: {
-    width: number;
-    height: number;
-    fps: number;
-  };
+    width: number
+    height: number
+    fps: number
+  }
 }
 
-const noop = () => {};
+const noop = () => {}
 
 /**
  * Animate workspace layout: a fixed column of a small preview, the shared mini
@@ -25,17 +25,15 @@ const noop = () => {};
  * the Color workspace's imperative-branch approach in `editor.tsx` rather than
  * the resizable preview/timeline split.
  */
-export const AnimateLayout = memo(function AnimateLayout({
-  project,
-}: AnimateLayoutProps) {
-  const [isKeyframeFocusMode, setIsKeyframeFocusMode] = useState(false);
+export const AnimateLayout = memo(function AnimateLayout({ project }: AnimateLayoutProps) {
+  const [isKeyframeFocusMode, setIsKeyframeFocusMode] = useState(false)
 
   useHotkeys(
-    "escape",
+    'escape',
     () => setIsKeyframeFocusMode(false),
     { ...HOTKEY_OPTIONS, enabled: isKeyframeFocusMode },
     [isKeyframeFocusMode],
-  );
+  )
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -76,5 +74,5 @@ export const AnimateLayout = memo(function AnimateLayout({
         </ErrorBoundary>
       </div>
     </div>
-  );
-});
+  )
+})

@@ -16,8 +16,7 @@ describe('selectPreviewVideoSource', () => {
         candidates: ['blob:stored-original', 'blob:scrub-proxy'],
         sourceTime: 42,
         toleranceSeconds: 0.01,
-        getCachedPredecodedBitmap: (src) =>
-          src === 'blob:scrub-proxy' ? proxyBitmap : null,
+        getCachedPredecodedBitmap: (src) => (src === 'blob:scrub-proxy' ? proxyBitmap : null),
       }),
     ).toBe('blob:scrub-proxy')
   })

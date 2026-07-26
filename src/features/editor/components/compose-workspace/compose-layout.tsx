@@ -132,9 +132,7 @@ export const MotionTimelineDock = memo(function MotionTimelineDock({
     [compositions],
   )
   const lastOpenedCompositionId = useComposeUiStore((state) => state.lastOpenedCompositionId)
-  const setLastOpenedCompositionId = useComposeUiStore(
-    (state) => state.setLastOpenedCompositionId,
-  )
+  const setLastOpenedCompositionId = useComposeUiStore((state) => state.setLastOpenedCompositionId)
 
   useLayoutEffect(() => {
     useComposeUiStore.getState().captureMotionReturnTab(returnTabIdRef.current)
@@ -161,9 +159,7 @@ export const MotionTimelineDock = memo(function MotionTimelineDock({
   useEffect(() => {
     if (activeComposition?.editorKind !== 'composite-2d' || !activeCompositionId) return
     if (mainHolder) {
-      const wrapper = mainHolder.items.find(
-        (item) => item.compositionId === activeCompositionId,
-      )
+      const wrapper = mainHolder.items.find((item) => item.compositionId === activeCompositionId)
       repairCompositeCompositionEditorialLeak({
         compositionId: activeCompositionId,
         editorialItemIds: mainHolder.items.map((item) => item.id),

@@ -147,11 +147,7 @@ export function selectPreviewVideoSource(options: {
   if (options.sourceTime !== undefined) {
     for (const src of candidates) {
       if (
-        options.getCachedPredecodedBitmap?.(
-          src,
-          options.sourceTime,
-          options.toleranceSeconds,
-        ) ||
+        options.getCachedPredecodedBitmap?.(src, options.sourceTime, options.toleranceSeconds) ||
         options.getCachedActivePreviewFallbackBitmap?.(
           src,
           options.sourceTime,
@@ -164,11 +160,7 @@ export function selectPreviewVideoSource(options: {
   }
   if (options.sourceTime !== undefined) {
     const activeTarget = candidates.find((src) =>
-      options.isActivePreviewSourceTarget?.(
-        src,
-        options.sourceTime!,
-        options.toleranceSeconds,
-      ),
+      options.isActivePreviewSourceTarget?.(src, options.sourceTime!, options.toleranceSeconds),
     )
     if (activeTarget) return activeTarget
   }
@@ -1019,8 +1011,7 @@ export async function createCompositionRenderer(
         waitForInflightPredecodedBitmap,
       } = await import('@/features/export/deps/preview-contract')
       itemRenderContext.getCachedPredecodedBitmap = getCachedPredecodedBitmap
-      itemRenderContext.getCachedActivePreviewFallbackBitmap =
-        getCachedActivePreviewFallbackBitmap
+      itemRenderContext.getCachedActivePreviewFallbackBitmap = getCachedActivePreviewFallbackBitmap
       itemRenderContext.isActivePreviewFrameCurrent = isActivePreviewFrameCurrent
       itemRenderContext.isActivePreviewFrameDecodeReady = isActivePreviewFrameDecodeReady
       itemRenderContext.isActivePreviewSourceTarget = isActivePreviewSourceTarget
@@ -1112,8 +1103,7 @@ export async function createCompositionRenderer(
       getLog().info('Video initialization complete', {
         mediabunny: useMediabunny.size,
         deferred: mainVideoPreloadPlan.deferredItemIds.length,
-        fallback:
-          renderMode === 'export' ? videoExtractors.size - useMediabunny.size : undefined,
+        fallback: renderMode === 'export' ? videoExtractors.size - useMediabunny.size : undefined,
         uniqueSources: new Set(videoSourceByItemId.values()).size,
       })
 
@@ -1678,8 +1668,7 @@ export async function createCompositionRenderer(
         fps,
       })
       itemRenderContext.captureDecodedVideoFrames =
-        Boolean(scrubbingCache && scrubbingFrameCacheActive) &&
-        renderedFrameCacheMode !== 'skip'
+        Boolean(scrubbingCache && scrubbingFrameCacheActive) && renderedFrameCacheMode !== 'skip'
       itemRenderContext.workerPredecodeWaitMs =
         renderedFrameCacheMode === 'skip' ? ISOLATED_SEEK_WORKER_WAIT_MS : undefined
 
@@ -2128,9 +2117,8 @@ export async function createCompositionRenderer(
 
         const renderTasksWithInteractionLimit = async () => {
           const results: Array<RenderedTaskResult | null> = Array(renderTasks.length).fill(null)
-          const concurrency = renderMode === 'preview'
-            ? Math.min(1, renderTasks.length)
-            : renderTasks.length
+          const concurrency =
+            renderMode === 'preview' ? Math.min(1, renderTasks.length) : renderTasks.length
           let nextTaskIndex = 0
           const worker = async () => {
             while (nextTaskIndex < renderTasks.length) {

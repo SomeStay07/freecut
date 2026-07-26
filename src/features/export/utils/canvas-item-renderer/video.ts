@@ -103,8 +103,7 @@ async function tryDrawWorkerPredecodedBitmap(
   toleranceSeconds: number,
 ): Promise<boolean> {
   const previewRootFrame = rctx.previewRootTimelineFrame ?? timelineFrame
-  const workerSource =
-    rctx.getResolvedVideoSource?.(item, sourceTime, toleranceSeconds) ?? item.src
+  const workerSource = rctx.getResolvedVideoSource?.(item, sourceTime, toleranceSeconds) ?? item.src
   if (rctx.renderMode !== 'preview' || !workerSource) {
     return false
   }
@@ -123,11 +122,7 @@ async function tryDrawWorkerPredecodedBitmap(
     )
   }
 
-  const cachedBitmap = rctx.getCachedPredecodedBitmap?.(
-    workerSource,
-    sourceTime,
-    toleranceSeconds,
-  )
+  const cachedBitmap = rctx.getCachedPredecodedBitmap?.(workerSource, sourceTime, toleranceSeconds)
   if (cachedBitmap && drawBitmap(cachedBitmap)) {
     recordPreviewVideoSource({
       frame: timelineFrame,
@@ -479,20 +474,13 @@ export async function renderVideoItem(
     }
     const isPendingOrSupersededSource =
       pendingWorkerSource &&
-      (rctx.isActivePreviewSourceTarget?.(
-          pendingWorkerSource,
-          sourceTime,
-          tier2ToleranceSeconds,
-        ) ||
+      (rctx.isActivePreviewSourceTarget?.(pendingWorkerSource, sourceTime, tier2ToleranceSeconds) ||
         rctx.isActivePreviewTargetSuperseded?.(
           pendingWorkerSource,
           sourceTime,
           tier2ToleranceSeconds,
         ))
-    if (
-      rctx.isActivePreviewFrameCurrent?.(previewRootFrame) ||
-      isPendingOrSupersededSource
-    ) {
+    if (rctx.isActivePreviewFrameCurrent?.(previewRootFrame) || isPendingOrSupersededSource) {
       // Direction changes can cancel the old source request before the new
       // one is registered. The root frame is still active, so returning it as
       // complete would commit a partially rendered (usually black) canvas.
@@ -531,11 +519,7 @@ export async function renderVideoItem(
   const rootFrameSuperseded = rctx.isActivePreviewFrameSuperseded?.(previewRootFrame) === true
   const sourceTargetSuperseded = Boolean(
     resolvedWorkerSource &&
-      rctx.isActivePreviewTargetSuperseded?.(
-        resolvedWorkerSource,
-        sourceTime,
-        tier2ToleranceSeconds,
-      ),
+    rctx.isActivePreviewTargetSuperseded?.(resolvedWorkerSource, sourceTime, tier2ToleranceSeconds),
   )
   if (rootFrameSuperseded || sourceTargetSuperseded) {
     // The pointer has already moved and the active worker cancelled this exact

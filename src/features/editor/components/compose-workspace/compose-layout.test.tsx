@@ -34,12 +34,7 @@ vi.mock('./new-composition-dialog', () => ({
     open ? <div data-testid="new-composition-dialog" /> : null,
 }))
 
-function addMotionComposition(
-  id: string,
-  name: string,
-  width = 1920,
-  items: TimelineItem[] = [],
-) {
+function addMotionComposition(id: string, name: string, width = 1920, items: TimelineItem[] = []) {
   useCompositionsStore.getState().addComposition({
     id,
     name,
@@ -97,9 +92,7 @@ describe('Motion workspace composition session', () => {
     useComposeUiStore.getState().setLastOpenedCompositionId('motion-b')
     useEditorStore.getState().setWorkspace('motion')
 
-    const view = render(
-      <MotionTimelineDock project={{ width: 1280, height: 720, fps: 30 }} />,
-    )
+    const view = render(<MotionTimelineDock project={{ width: 1280, height: 720, fps: 30 }} />)
 
     await waitFor(() =>
       expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('motion-b'),
@@ -142,9 +135,7 @@ describe('Motion workspace composition session', () => {
     )
     expect(screen.getByTestId('compositing-timeline')).toBeInTheDocument()
     expect(useItemsStore.getState().items).toEqual([])
-    expect(
-      useCompositionsStore.getState().compositionById['motion-a']?.items,
-    ).toEqual([])
+    expect(useCompositionsStore.getState().compositionById['motion-a']?.items).toEqual([])
   })
 
   it('repairs a Motion composition that already absorbed Main timeline items', async () => {
@@ -184,11 +175,7 @@ describe('Motion workspace composition session', () => {
       transform: { x: 0, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
     } as TimelineItem
     useItemsStore.getState().setItems([editItem, wrapper])
-    addMotionComposition('motion-a', 'Motion composition', 1920, [
-      editItem,
-      wrapper,
-      motionItem,
-    ])
+    addMotionComposition('motion-a', 'Motion composition', 1920, [editItem, wrapper, motionItem])
     useCompositionsStore.getState().updateComposition('motion-a', {
       durationInFrames: 1200,
     })
@@ -202,9 +189,7 @@ describe('Motion workspace composition session', () => {
     expect(
       useCompositionsStore.getState().compositionById['motion-a']?.items.map((item) => item.id),
     ).toEqual(['motion-item'])
-    expect(
-      useCompositionsStore.getState().compositionById['motion-a']?.durationInFrames,
-    ).toBe(300)
+    expect(useCompositionsStore.getState().compositionById['motion-a']?.durationInFrames).toBe(300)
   })
 
   it('routes an opened Motion composition out of Edit and into Motion', async () => {
@@ -274,9 +259,7 @@ describe('Motion workspace composition session', () => {
     useCompositionNavigationStore.getState().switchToSequence('motion-a')
     useEditorStore.getState().setWorkspace('motion')
 
-    const view = render(
-      <MotionTimelineDock project={{ width: 1280, height: 720, fps: 30 }} />,
-    )
+    const view = render(<MotionTimelineDock project={{ width: 1280, height: 720, fps: 30 }} />)
     expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('motion-a')
 
     useEditorStore.getState().setWorkspace('edit')

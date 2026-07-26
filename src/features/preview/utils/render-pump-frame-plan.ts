@@ -153,11 +153,7 @@ export function shouldRestoreCommittedPreviewSnapshot({
   currentFrame,
   snapshotFrame,
 }: ShouldRestoreCommittedPreviewSnapshotParams): boolean {
-  return (
-    previewFrame === null &&
-    previousPreviewFrame !== null &&
-    snapshotFrame === currentFrame
-  )
+  return previewFrame === null && previousPreviewFrame !== null && snapshotFrame === currentFrame
 }
 
 interface ResolveScrubDirectionPlanParams {

@@ -135,7 +135,9 @@ async function addCompositionAudio(params: {
 
 interface PreparedAudioPacketCopy {
   input: InstanceType<MediabunnyModule['Input']>
-  track: NonNullable<Awaited<ReturnType<InstanceType<MediabunnyModule['Input']>['getPrimaryAudioTrack']>>>
+  track: NonNullable<
+    Awaited<ReturnType<InstanceType<MediabunnyModule['Input']>['getPrimaryAudioTrack']>>
+  >
   source: InstanceType<MediabunnyModule['EncodedAudioPacketSource']>
   durationSeconds: number
 }

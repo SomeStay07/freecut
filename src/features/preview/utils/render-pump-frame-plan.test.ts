@@ -131,9 +131,7 @@ describe('render pump frame plan', () => {
       displayedFrameBlank: false,
     }
 
-    expect(
-      shouldRejectBlankTransportHandoff({ ...base, isTransportSettling: false }),
-    ).toBe(false)
+    expect(shouldRejectBlankTransportHandoff({ ...base, isTransportSettling: false })).toBe(false)
     expect(shouldRejectBlankTransportHandoff({ ...base, displayedFrame: 98 })).toBe(false)
     expect(shouldRejectBlankTransportHandoff({ ...base, renderedFrameBlank: false })).toBe(false)
     expect(shouldRejectBlankTransportHandoff({ ...base, displayedFrameBlank: true })).toBe(false)

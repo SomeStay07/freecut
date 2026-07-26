@@ -38,11 +38,7 @@ function updatePausedScrubFrame(
 ) {
   const nextFrame = normalizeFrame(frame)
   const nextItemId = itemId ?? null
-  if (
-    state.currentFrame === nextFrame &&
-    state.previewFrame === null &&
-    nextItemId === null
-  ) {
+  if (state.currentFrame === nextFrame && state.previewFrame === null && nextItemId === null) {
     return state
   }
   if (

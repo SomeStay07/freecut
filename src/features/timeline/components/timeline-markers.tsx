@@ -835,10 +835,8 @@ export const TimelineMarkers = memo(function TimelineMarkers({
           const coordinateBox = scrollContainer ?? containerRef.current
           const coordinateRect = coordinateBox?.getBoundingClientRect()
           const scrollLeft = scrollContainer?.scrollLeft ?? 0
-          const rangeLeft =
-            (coordinateRect?.left ?? 0) + frameToPixels(nextIn) - scrollLeft
-          const rangeRight =
-            (coordinateRect?.left ?? 0) + frameToPixels(nextOut) - scrollLeft
+          const rangeLeft = (coordinateRect?.left ?? 0) + frameToPixels(nextIn) - scrollLeft
+          const rangeRight = (coordinateRect?.left ?? 0) + frameToPixels(nextOut) - scrollLeft
           const visibleLeft = coordinateRect
             ? Math.max(coordinateRect.left, Math.min(coordinateRect.right, rangeLeft))
             : rangeLeft

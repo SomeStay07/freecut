@@ -443,18 +443,12 @@ export function resolveActivePreviewLookaheadTimestamps({
   const frameDuration = 1 / normalizedFps
   const sourceDelta = previousSourceTime === null ? 0 : sourceTime - previousSourceTime
   const direction: -1 | 0 | 1 =
-    Math.abs(sourceDelta) > frameDuration / 4
-      ? sourceDelta > 0
-        ? 1
-        : -1
-      : fallbackDirection
+    Math.abs(sourceDelta) > frameDuration / 4 ? (sourceDelta > 0 ? 1 : -1) : fallbackDirection
   if (direction === 0) return []
 
   const safeElapsedMs = Number.isFinite(elapsedMs) && elapsedMs > 0 ? elapsedMs : 1000
   const velocityFramesPerSecond =
-    previousSourceTime === null
-      ? 0
-      : (Math.abs(sourceDelta) * normalizedFps * 1000) / safeElapsedMs
+    previousSourceTime === null ? 0 : (Math.abs(sourceDelta) * normalizedFps * 1000) / safeElapsedMs
   const strideFrames =
     velocityFramesPerSecond >= 36
       ? Math.max(4, Math.min(120, Math.round(velocityFramesPerSecond * 0.05)))
