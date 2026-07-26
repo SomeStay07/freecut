@@ -13,7 +13,20 @@ checklist for pulling upstream without breaking our engine.
 - Merge `origin/main` (their release branch) — not `develop`.
 - Never run the sync while a headless render is in flight (shared dist/).
 
-## Known conflict points (state as of 2026-07-26)
+## Sync log
+
+- **2026-07-26 — synced through upstream #347 (+126, the Motion wave).** Only 2 real
+  conflicts (segment-spans add/add, media-crop refit-vs-fitMode) — resolved per the
+  table below. Upstream DID touch `headless/lib/http-security.mjs` (canonical
+  missing-path resolution), breaking the macOS `/var -> /private/var` tmpdir
+  assumption in `http-security.test.mjs` — fixture now realpaths its root. Upstream
+  also dropped `calculateMediaDrawDimensions` (replaced by `fitMode` in
+  `calculateMediaCropLayout`) — its tests removed. Driver page-boot deduped into
+  `withHarnessPage` (page-session.mjs) to green the changed-health gate.
+  The "upstream doesn't touch headless/**" assumption below is now FALSE — check
+  `git log origin/main -- headless src/headless` before the next sync.
+
+## Known conflict points (state as of 2026-07-26, consumed by that sync — verify against the next delta)
 
 | File | Situation | Resolution |
 |---|---|---|
