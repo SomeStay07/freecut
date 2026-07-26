@@ -13,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { HeadlessPlayer, type PlayerRef } from '@/features/preview/deps/player-core'
 import { MainComposition } from '@/features/preview/deps/composition-runtime'
+import { useItemsStore } from '@/features/preview/deps/timeline-store'
 import type { CompositionInputProps } from '@/types/export'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
@@ -25,6 +26,7 @@ import {
   markPlaybackColdStart,
   resolvePlaybackColdStartVisibleFrame,
 } from '../utils/playback-cold-start-event'
+import { DomTextScrubOverlay } from './dom-text-scrub-overlay'
 
 interface PreviewStageProps {
   backgroundRef: RefObject<HTMLDivElement | null>
@@ -45,6 +47,7 @@ interface PreviewStageProps {
   colorGradeSplitPosition?: number
   onColorGradeSplitPositionChange?: (position: number) => void
   inputProps: CompositionInputProps
+  domTextScrubInputProps?: CompositionInputProps
   onBackgroundClick: MouseEventHandler<HTMLDivElement>
   onFrameChange: (frame: number) => void
   onPlayStateChange: (playing: boolean) => void
@@ -84,6 +87,7 @@ export const PreviewStage = memo(function PreviewStage({
   colorGradeSplitPosition = 0.5,
   onColorGradeSplitPositionChange,
   inputProps,
+  domTextScrubInputProps,
   onBackgroundClick,
   onFrameChange,
   onPlayStateChange,
@@ -97,6 +101,7 @@ export const PreviewStage = memo(function PreviewStage({
   const pixelSnapAnchorRef = useRef<HTMLDivElement | null>(null)
   const pixelSnappedPlayerRef = useRef<HTMLDivElement | null>(null)
   const playerSurfaceRef = useRef<HTMLDivElement | null>(null)
+  const textOverlayPlayerRef = useRef<PlayerRef | null>(null)
   const renderedOverlayVisibleRef = useRef(isRenderedOverlayVisible)
   renderedOverlayVisibleRef.current = isRenderedOverlayVisible
 
@@ -411,7 +416,11 @@ export const PreviewStage = memo(function PreviewStage({
                 onFrameChange={onFrameChange}
                 onPlayStateChange={onPlayStateChange}
               >
-                <MainComposition {...inputProps} useProxyMedia={useProxy} />
+                <MainComposition
+                  {...inputProps}
+                  useProxyMedia={useProxy}
+                  liveItemTransformSource={useItemsStore}
+                />
               </HeadlessPlayer>
 
               {FAST_SCRUB_RENDERER_ENABLED && (
@@ -450,6 +459,18 @@ export const PreviewStage = memo(function PreviewStage({
                   visibility: isSplitGradeAfterVisible ? 'visible' : 'hidden',
                 }}
               />
+
+              {domTextScrubInputProps && (
+                <DomTextScrubOverlay
+                  playerRef={textOverlayPlayerRef}
+                  visible={isRenderedOverlayVisible}
+                  durationInFrames={totalFrames}
+                  fps={fps}
+                  renderSize={playerRenderSize}
+                  layoutSize={playerSize}
+                  inputProps={domTextScrubInputProps}
+                />
+              )}
 
               {perfPanel}
               {comparisonOverlay}

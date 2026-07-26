@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { i18n } from '@/i18n'
+import { toast } from 'sonner'
 import {
   Shapes,
   ChevronUp,
@@ -18,8 +19,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { ShapeItem, ShapeType, TimelineItem } from '@/types/timeline'
-import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { useKeyframesStore, useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useGizmoStore, useMaskEditorStore } from '@/features/editor/deps/preview'
+import { hasPathVertexKeyframes } from '@/features/editor/deps/keyframes'
 import {
   PropertySection,
   PropertyRow,
@@ -28,6 +30,11 @@ import {
   ColorPicker,
 } from '../components'
 import { reversePathVertices, rotateClosedPathStart } from '@/shared/graphics/shapes/bezier-path'
+import {
+  DEFAULT_SHAPE_GRADIENT_ANGLE,
+  DEFAULT_SHAPE_GRADIENT_END_COLOR,
+  getSwappedShapeLinearGradientColors,
+} from '@/shared/graphics/shapes/linear-gradient'
 import { getPathClosureUpdates, getShapeSectionControlVisibility } from './shape-section-visibility'
 
 // Shape type options
@@ -96,6 +103,29 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         : undefined,
       fillEnabled: shapeItems.every((i) => (i.fillEnabled ?? true) === (first.fillEnabled ?? true))
         ? (first.fillEnabled ?? true)
+        : ('mixed' as const),
+      fillType: shapeItems.every((i) => (i.fillType ?? 'solid') === (first.fillType ?? 'solid'))
+        ? (first.fillType ?? 'solid')
+        : undefined,
+      gradientStartColor: shapeItems.every(
+        (i) =>
+          (i.gradientStartColor ?? i.fillColor) === (first.gradientStartColor ?? first.fillColor),
+      )
+        ? (first.gradientStartColor ?? first.fillColor)
+        : undefined,
+      gradientEndColor: shapeItems.every(
+        (i) =>
+          (i.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR) ===
+          (first.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR),
+      )
+        ? (first.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR)
+        : undefined,
+      gradientAngle: shapeItems.every(
+        (i) =>
+          (i.gradientAngle ?? DEFAULT_SHAPE_GRADIENT_ANGLE) ===
+          (first.gradientAngle ?? DEFAULT_SHAPE_GRADIENT_ANGLE),
+      )
+        ? (first.gradientAngle ?? DEFAULT_SHAPE_GRADIENT_ANGLE)
         : ('mixed' as const),
       strokeColor: shapeItems.every((i) => (i.strokeColor ?? '') === (first.strokeColor ?? ''))
         ? (first.strokeColor ?? '')
@@ -181,6 +211,9 @@ export function ShapeSection({ items }: ShapeSectionProps) {
       maskFeather: shapeItems.every((i) => (i.maskFeather ?? 10) === (first.maskFeather ?? 10))
         ? (first.maskFeather ?? 10)
         : ('mixed' as const),
+      maskOpacity: shapeItems.every((i) => (i.maskOpacity ?? 100) === (first.maskOpacity ?? 100))
+        ? (first.maskOpacity ?? 100)
+        : ('mixed' as const),
       maskInvert: shapeItems.every((i) => (i.maskInvert ?? false) === (first.maskInvert ?? false))
         ? (first.maskInvert ?? false)
         : ('mixed' as const),
@@ -196,6 +229,10 @@ export function ShapeSection({ items }: ShapeSectionProps) {
   const showInnerRadius = sharedValues?.shapeType === 'star'
   const singlePathShape =
     shapeItems.length === 1 && shapeItems[0]?.shapeType === 'path' ? shapeItems[0] : null
+  const singlePathKeyframes = useKeyframesStore((state) =>
+    singlePathShape ? state.keyframesByItemId[singlePathShape.id] : undefined,
+  )
+  const pathTopologyLocked = hasPathVertexKeyframes(singlePathKeyframes)
   const isEditingPathShape =
     !!singlePathShape && isEditing && !penMode && editingItemId === singlePathShape.id
   const controlVisibility = getShapeSectionControlVisibility(shapeItems)
@@ -296,6 +333,94 @@ export function ShapeSection({ items }: ShapeSectionProps) {
     [updateShapeItems],
   )
 
+  const gradientStartColor =
+    sharedValues?.gradientStartColor ?? sharedValues?.fillColor ?? '#3b82f6'
+  const gradientEndColor = sharedValues?.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR
+  const gradientAngle =
+    typeof sharedValues?.gradientAngle === 'number'
+      ? sharedValues.gradientAngle
+      : DEFAULT_SHAPE_GRADIENT_ANGLE
+
+  const handleFillTypeChange = useCallback(
+    (value: string) => {
+      if (value === 'linear') {
+        updateShapeItems({
+          fillType: 'linear',
+          gradientStartColor,
+          gradientEndColor,
+          gradientAngle,
+        })
+        return
+      }
+      updateShapeItems({ fillType: 'solid' })
+    },
+    [gradientAngle, gradientEndColor, gradientStartColor, updateShapeItems],
+  )
+
+  const handleGradientStartColorLiveChange = useCallback(
+    (value: string) => {
+      const previews: Record<string, { fillColor: string; gradientStartColor: string }> = {}
+      itemIds.forEach((id) => {
+        previews[id] = { fillColor: value, gradientStartColor: value }
+      })
+      setPropertiesPreviewNew(previews)
+    },
+    [itemIds, setPropertiesPreviewNew],
+  )
+
+  const handleGradientStartColorChange = useCallback(
+    (value: string) => {
+      updateShapeItems({ fillColor: value, gradientStartColor: value })
+      queueMicrotask(() => clearPreview())
+    },
+    [clearPreview, updateShapeItems],
+  )
+
+  const handleGradientEndColorLiveChange = useCallback(
+    (value: string) => {
+      const previews: Record<string, { gradientEndColor: string }> = {}
+      itemIds.forEach((id) => {
+        previews[id] = { gradientEndColor: value }
+      })
+      setPropertiesPreviewNew(previews)
+    },
+    [itemIds, setPropertiesPreviewNew],
+  )
+
+  const handleGradientEndColorChange = useCallback(
+    (value: string) => {
+      updateShapeItems({ gradientEndColor: value })
+      queueMicrotask(() => clearPreview())
+    },
+    [clearPreview, updateShapeItems],
+  )
+
+  const handleGradientAngleLiveChange = useCallback(
+    (value: number) => {
+      const previews: Record<string, { gradientAngle: number }> = {}
+      itemIds.forEach((id) => {
+        previews[id] = { gradientAngle: value }
+      })
+      setPropertiesPreviewNew(previews)
+    },
+    [itemIds, setPropertiesPreviewNew],
+  )
+
+  const handleGradientAngleChange = useCallback(
+    (value: number) => {
+      updateShapeItems({ gradientAngle: value })
+      queueMicrotask(() => clearPreview())
+    },
+    [clearPreview, updateShapeItems],
+  )
+
+  const handleSwapGradientColors = useCallback(() => {
+    shapeItems.forEach((item) => {
+      const updates = getSwappedShapeLinearGradientColors(item)
+      if (updates) updateItem(item.id, updates)
+    })
+  }, [shapeItems, updateItem])
+
   const handleStrokeEnabledChange = useCallback(
     (enabled: boolean) => {
       updateShapeItems({
@@ -337,24 +462,36 @@ export function ShapeSection({ items }: ShapeSectionProps) {
     (closed: boolean) => {
       if (!closed && singlePathShape?.isMask) return
       if (!singlePathShape) return
+      if (pathTopologyLocked) {
+        toast.error('Path topology cannot change while Path Geometry has keyframes.')
+        return
+      }
       updateItem(singlePathShape.id, getPathClosureUpdates(singlePathShape, closed))
     },
-    [singlePathShape, updateItem],
+    [pathTopologyLocked, singlePathShape, updateItem],
   )
 
   const handleReversePath = useCallback(() => {
     if (!singlePathShape?.pathVertices) return
+    if (pathTopologyLocked) {
+      toast.error('Path vertex order cannot change while Path Geometry has keyframes.')
+      return
+    }
     updateItem(singlePathShape.id, {
       pathVertices: reversePathVertices(singlePathShape.pathVertices),
     })
-  }, [singlePathShape, updateItem])
+  }, [pathTopologyLocked, singlePathShape, updateItem])
 
   const handleSetFirstVertex = useCallback(() => {
     if (!singlePathShape?.pathVertices || selectedVertexIndex === null) return
+    if (pathTopologyLocked) {
+      toast.error('The first vertex cannot change while Path Geometry has keyframes.')
+      return
+    }
     updateItem(singlePathShape.id, {
       pathVertices: rotateClosedPathStart(singlePathShape.pathVertices, selectedVertexIndex),
     })
-  }, [selectedVertexIndex, singlePathShape, updateItem])
+  }, [pathTopologyLocked, selectedVertexIndex, singlePathShape, updateItem])
 
   // Corner radius handlers with live preview
   const handleCornerRadiusLiveChange = useCallback(
@@ -466,7 +603,8 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         | 'taperEndWidth'
         | 'taperStartLength'
         | 'taperEndLength'
-        | 'maskFeather',
+        | 'maskFeather'
+        | 'maskOpacity',
       value: number,
     ) => {
       updateShapeItems({ [property]: value })
@@ -484,6 +622,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         // Set defaults when enabling mask
         maskType: checked ? 'clip' : undefined,
         maskFeather: checked ? 0 : undefined,
+        maskOpacity: checked ? 100 : undefined,
         maskInvert: checked ? false : undefined,
         pathClosed: checked ? true : undefined,
       })
@@ -526,6 +665,25 @@ export function ShapeSection({ items }: ShapeSectionProps) {
       queueMicrotask(() => clearPreview())
     },
     [updateShapeItems, clearPreview],
+  )
+
+  const handleMaskOpacityLiveChange = useCallback(
+    (value: number) => {
+      const previews: Record<string, { maskOpacity: number }> = {}
+      itemIds.forEach((id) => {
+        previews[id] = { maskOpacity: value }
+      })
+      setPropertiesPreviewNew(previews)
+    },
+    [itemIds, setPropertiesPreviewNew],
+  )
+
+  const handleMaskOpacityChange = useCallback(
+    (value: number) => {
+      updateShapeItems({ maskOpacity: value })
+      queueMicrotask(() => clearPreview())
+    },
+    [clearPreview, updateShapeItems],
   )
 
   // Mask invert handler
@@ -662,14 +820,72 @@ export function ShapeSection({ items }: ShapeSectionProps) {
 
       {/* Fill Color */}
       {controlVisibility.showFill && sharedValues.fillEnabled !== false && (
-        <ColorPicker
-          label={t('editor.shapeSection.fillColor')}
-          color={sharedValues.fillColor ?? '#3b82f6'}
-          onChange={handleFillColorChange}
-          onLiveChange={handleFillColorLiveChange}
-          onReset={() => handleFillColorChange('#3b82f6')}
-          defaultColor="#3b82f6"
-        />
+        <>
+          <PropertyRow label={t('editor.shapeSection.fillType')}>
+            <Select value={sharedValues.fillType} onValueChange={handleFillTypeChange}>
+              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                <SelectValue placeholder={t('editor.shapeSection.mixed')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="solid">{t('editor.shapeSection.fillTypeSolid')}</SelectItem>
+                <SelectItem value="linear">{t('editor.shapeSection.fillTypeLinear')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </PropertyRow>
+          {sharedValues.fillType === 'linear' ? (
+            <>
+              <ColorPicker
+                label={t('editor.shapeSection.gradientStartColor')}
+                color={sharedValues.gradientStartColor ?? sharedValues.fillColor ?? '#3b82f6'}
+                onChange={handleGradientStartColorChange}
+                onLiveChange={handleGradientStartColorLiveChange}
+                onReset={() => handleGradientStartColorChange('#3b82f6')}
+                defaultColor="#3b82f6"
+              />
+              <ColorPicker
+                label={t('editor.shapeSection.gradientEndColor')}
+                color={sharedValues.gradientEndColor ?? DEFAULT_SHAPE_GRADIENT_END_COLOR}
+                onChange={handleGradientEndColorChange}
+                onLiveChange={handleGradientEndColorLiveChange}
+                onReset={() => handleGradientEndColorChange(DEFAULT_SHAPE_GRADIENT_END_COLOR)}
+                defaultColor={DEFAULT_SHAPE_GRADIENT_END_COLOR}
+              />
+              <PropertyRow label={t('editor.shapeSection.gradientAngle')}>
+                <PropertySliderControl
+                  value={sharedValues.gradientAngle}
+                  onChange={handleGradientAngleChange}
+                  onLiveChange={handleGradientAngleLiveChange}
+                  min={-180}
+                  max={180}
+                  step={1}
+                  unit="°"
+                  onReset={() => handleGradientAngleChange(DEFAULT_SHAPE_GRADIENT_ANGLE)}
+                  resetLabel={t('editor.shapeSection.resetToDefault')}
+                />
+              </PropertyRow>
+              <PropertyRow label={t('editor.shapeSection.gradientColors')}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 flex-1 text-xs"
+                  onClick={handleSwapGradientColors}
+                >
+                  {t('editor.shapeSection.swapGradientColors')}
+                </Button>
+              </PropertyRow>
+            </>
+          ) : sharedValues.fillType === 'solid' ? (
+            <ColorPicker
+              label={t('editor.shapeSection.fillColor')}
+              color={sharedValues.fillColor ?? '#3b82f6'}
+              onChange={handleFillColorChange}
+              onLiveChange={handleFillColorLiveChange}
+              onReset={() => handleFillColorChange('#3b82f6')}
+              defaultColor="#3b82f6"
+            />
+          ) : null}
+        </>
       )}
 
       {controlVisibility.showStroke && (
@@ -1080,6 +1296,20 @@ export function ShapeSection({ items }: ShapeSectionProps) {
               />
             </PropertyRow>
           )}
+
+          <PropertyRow label={t('editor.fillSection.opacity')}>
+            <PropertySliderControl
+              value={sharedValues.maskOpacity}
+              onChange={handleMaskOpacityChange}
+              onLiveChange={handleMaskOpacityLiveChange}
+              min={0}
+              max={100}
+              step={1}
+              unit="%"
+              onReset={() => resetNumericProperty('maskOpacity', 100)}
+              resetLabel={t('editor.shapeSection.resetToDefault')}
+            />
+          </PropertyRow>
 
           {/* Invert Mask */}
           <PropertyRow label={t('editor.shapeSection.invert')}>

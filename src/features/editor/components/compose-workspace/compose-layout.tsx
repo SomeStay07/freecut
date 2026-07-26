@@ -21,6 +21,7 @@ interface MotionWorkspaceProject {
   width: number
   height: number
   fps: number
+  backgroundColor?: string
 }
 
 function restoreMotionReturnTimeline(): void {
@@ -59,14 +60,20 @@ export const MotionPreviewArea = memo(function MotionPreviewArea({
   const activeComposition = useCompositionsStore((state) =>
     activeCompositionId ? state.compositionById[activeCompositionId] : undefined,
   )
+  const mainHolder = useCompositionNavigationStore((state) => state.mainHolder)
+  const isTimelineLoading = useTimelineSettingsStore((state) => state.isTimelineLoading)
   const previewProject = useMemo(() => {
-    if (activeComposition?.editorKind !== 'composite-2d') return null
+    if (isTimelineLoading || !mainHolder || activeComposition?.editorKind !== 'composite-2d') {
+      return null
+    }
     return {
       width: activeComposition.width,
       height: activeComposition.height,
       fps: activeComposition.fps,
+      backgroundColor: activeComposition.backgroundColor,
+      durationInFrames: activeComposition.durationInFrames,
     }
-  }, [activeComposition])
+  }, [activeComposition, isTimelineLoading, mainHolder])
 
   if (!previewProject) {
     return (
@@ -107,7 +114,13 @@ export const MotionPreviewArea = memo(function MotionPreviewArea({
     )
   }
 
-  return <PreviewArea project={previewProject} />
+  return (
+    <PreviewArea
+      project={previewProject}
+      durationInFrames={previewProject.durationInFrames}
+      preferProjectStoreMetadata={false}
+    />
+  )
 })
 
 /**
@@ -132,9 +145,7 @@ export const MotionTimelineDock = memo(function MotionTimelineDock({
     [compositions],
   )
   const lastOpenedCompositionId = useComposeUiStore((state) => state.lastOpenedCompositionId)
-  const setLastOpenedCompositionId = useComposeUiStore(
-    (state) => state.setLastOpenedCompositionId,
-  )
+  const setLastOpenedCompositionId = useComposeUiStore((state) => state.setLastOpenedCompositionId)
 
   useLayoutEffect(() => {
     useComposeUiStore.getState().captureMotionReturnTab(returnTabIdRef.current)
@@ -161,9 +172,7 @@ export const MotionTimelineDock = memo(function MotionTimelineDock({
   useEffect(() => {
     if (activeComposition?.editorKind !== 'composite-2d' || !activeCompositionId) return
     if (mainHolder) {
-      const wrapper = mainHolder.items.find(
-        (item) => item.compositionId === activeCompositionId,
-      )
+      const wrapper = mainHolder.items.find((item) => item.compositionId === activeCompositionId)
       repairCompositeCompositionEditorialLeak({
         compositionId: activeCompositionId,
         editorialItemIds: mainHolder.items.map((item) => item.id),
@@ -182,19 +191,25 @@ export const MotionTimelineDock = memo(function MotionTimelineDock({
     // Wait until hydration is fully complete before restoring the last comp.
     if (isTimelineLoading) return
     if (useEditorStore.getState().workspace !== 'motion') return
-    if (activeComposition?.editorKind === 'composite-2d') return
+    if (activeComposition?.editorKind === 'composite-2d' && mainHolder) return
     const target =
       motionCompositions.find((composition) => composition.id === lastOpenedCompositionId) ??
       motionCompositions[0]
     if (target) {
       useCompositionNavigationStore.getState().switchToSequence(target.id)
     }
-  }, [activeComposition, isTimelineLoading, lastOpenedCompositionId, motionCompositions])
+  }, [
+    activeComposition,
+    isTimelineLoading,
+    lastOpenedCompositionId,
+    mainHolder,
+    motionCompositions,
+  ])
 
   // Never mount the Motion timeline against root/editorial stores. During an
   // F5 it intentionally stays empty for a frame, then mounts only after the
   // hydrated Motion composition has become the active runtime context.
-  if (isTimelineLoading || activeComposition?.editorKind !== 'composite-2d') {
+  if (isTimelineLoading || !mainHolder || activeComposition?.editorKind !== 'composite-2d') {
     return <div className="h-full bg-background" data-testid="motion-timeline-empty" />
   }
 

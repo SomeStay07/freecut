@@ -67,11 +67,6 @@ import {
 import { IoDragReadout } from '@/shared/timeline/io-range'
 const logger = createLogger('Editor')
 const LazyTimeline = lazy(() => importTimeline().then(({ Timeline }) => ({ default: Timeline })))
-const LazyAnimateLayout = lazy(() =>
-  import('./animate-workspace/animate-layout').then(({ AnimateLayout }) => ({
-    default: AnimateLayout,
-  })),
-)
 const LazyColorGradingDock = lazy(() =>
   import('./color-grading-dock').then(({ ColorGradingDock }) => ({ default: ColorGradingDock })),
 )
@@ -368,6 +363,21 @@ const TimelineDialogHost = memo(function TimelineDialogHost() {
   )
 })
 
+const AutoSaveController = memo(function AutoSaveController({
+  onSave,
+}: {
+  onSave: () => Promise<void>
+}) {
+  const isDirty = useTimelineStore((s: { isDirty: boolean }) => s.isDirty)
+  useAutoSave({ isDirty, onSave })
+  return null
+})
+
+const TimelineShortcutsController = memo(function TimelineShortcutsController() {
+  useTimelineShortcuts()
+  return null
+})
+
 export const LoadedEditor = memo(function LoadedEditor({
   projectId,
   project,
@@ -527,9 +537,6 @@ export const LoadedEditor = memo(function LoadedEditor({
     router,
   ])
 
-  // Track unsaved changes
-  const isDirty = useTimelineStore((s: { isDirty: boolean }) => s.isDirty)
-
   useEffect(() => {
     syncSidebarLayout(editorLayout)
   }, [editorLayout, syncSidebarLayout])
@@ -649,25 +656,15 @@ export const LoadedEditor = memo(function LoadedEditor({
     onExport: handleExport,
   })
 
-  // Enable auto-save based on settings interval
-  useAutoSave({
-    isDirty,
-    onSave: handleSave,
-  })
-
-  // Enable timeline shortcuts (space, cut tool, rate tool, etc.)
-  useTimelineShortcuts()
-
   // Enable transition breakage notifications
   useTransitionBreakageNotifications()
 
   const timelineDuration = 30
   const isColorWorkspace = workspace === 'color'
-  const isAnimateWorkspace = workspace === 'animate'
   const isMotionWorkspace = workspace === 'motion'
-  // Color and Animate replace the default editor shell. Motion deliberately
-  // keeps it and swaps only the lower timeline dock.
-  const hidesDefaultSidebars = isColorWorkspace || isAnimateWorkspace
+  // Color replaces the default editor shell. Motion deliberately keeps it and
+  // swaps the preview/timeline surfaces while retaining the shared sidebars.
+  const hidesDefaultSidebars = isColorWorkspace
 
   return (
     <div
@@ -676,12 +673,14 @@ export const LoadedEditor = memo(function LoadedEditor({
       role="application"
       aria-label={t('editor.editor.appLabel')}
     >
+      <AutoSaveController onSave={handleSave} />
+      <TimelineShortcutsController />
+
       {/* Top Toolbar */}
       <InteractionLockRegion locked={isMaskEditingActive}>
         <Toolbar
           projectId={projectId}
           project={project}
-          isDirty={isDirty}
           onSave={handleSave}
           onExport={handleExport}
           onExportBundle={handleExportBundle}
@@ -702,11 +701,7 @@ export const LoadedEditor = memo(function LoadedEditor({
         )}
 
         {/* Right side: Preview/Properties + Timeline */}
-        {isAnimateWorkspace ? (
-          <Suspense fallback={null}>
-            <LazyAnimateLayout project={project} />
-          </Suspense>
-        ) : isColorWorkspace ? (
+        {isColorWorkspace ? (
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <ErrorBoundary level="feature">

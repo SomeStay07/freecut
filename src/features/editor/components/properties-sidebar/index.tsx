@@ -11,11 +11,14 @@ import {
 } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
 import { i18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Settings2 } from 'lucide-react'
-import { useItemsStore } from '@/features/editor/deps/timeline-store'
+import {
+  useCompositionNavigationStore,
+  useCompositionsStore,
+  useItemsStore,
+} from '@/features/editor/deps/timeline-store'
 import { useEditorStore } from '@/shared/state/editor'
 import { useSelectionStore } from '@/shared/state/selection'
 import type { TimelineItem } from '@/types/timeline'
@@ -132,33 +135,61 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
   const setRightSidebarWidth = useEditorStore((s) => s.setRightSidebarWidth)
   const propertiesFullColumn = useEditorStore((s) => s.propertiesFullColumn)
   const togglePropertiesFullColumn = useEditorStore((s) => s.togglePropertiesFullColumn)
+  const workspace = useEditorStore((s) => s.workspace)
+  const clipInspectorTab = useEditorStore((s) => s.clipInspectorTab)
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId)
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId)
+  const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId)
+  const activeCompositionName = useCompositionsStore((s) =>
+    activeCompositionId ? s.compositionById[activeCompositionId]?.name : undefined,
+  )
   const prefersReducedMotion = useReducedMotion()
-  const selectedItems = useItemsStore(
-    useShallow(
-      useCallback(
-        (s) => {
-          const items: HeaderItem[] = []
-
-          for (const itemId of selectedItemIds) {
-            const item = s.itemById[itemId]
-            if (item) {
-              items.push(item)
-            }
-          }
-
-          return items
-        },
-        [selectedItemIds],
-      ),
+  const selectedItemHeaderSignature = useItemsStore(
+    useCallback(
+      (state) =>
+        JSON.stringify(
+          selectedItemIds.flatMap((itemId) => {
+            const item = state.itemById[itemId]
+            return item
+              ? [
+                  {
+                    id: item.id,
+                    label: item.label,
+                    linkedGroupId: item.linkedGroupId,
+                    type: item.type,
+                  } satisfies HeaderItem,
+                ]
+              : []
+          }),
+        ),
+      [selectedItemIds],
     ),
+  )
+  const selectedItems = useMemo(
+    () => JSON.parse(selectedItemHeaderSignature) as HeaderItem[],
+    [selectedItemHeaderSignature],
   )
 
   const hasClipSelection = selectedItemIds.length > 0
   const clipHeader = useMemo(() => getClipHeader(selectedItems), [selectedItems])
   const activeClipHeader = !selectedTransitionId && !selectedMarkerId ? clipHeader : null
+  const motionCompositionHeader =
+    workspace === 'motion' &&
+    !hasClipSelection &&
+    !selectedTransitionId &&
+    !selectedMarkerId &&
+    activeCompositionName
+      ? activeCompositionName
+      : null
+  const headerLabel =
+    workspace === 'motion' && activeClipHeader
+      ? t('editor.propertiesSidebar.layer', { defaultValue: 'Layer' })
+      : motionCompositionHeader
+        ? t('editor.propertiesSidebar.composition', { defaultValue: 'Composition' })
+        : t('editor.propertiesSidebar.title')
+  const headerContext = activeClipHeader?.text ?? motionCompositionHeader
+  const headerTitle = activeClipHeader?.title ?? motionCompositionHeader ?? undefined
 
   // Keep the panel content mounted + visible while the collapse animation plays
   // so it slides out smoothly instead of blinking away. Only switch Activity to
@@ -272,17 +303,12 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
                 </Button>
                 <Settings2 className="w-3 h-3 shrink-0 text-muted-foreground" />
                 <h2 className="min-w-0 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                  <span className="shrink-0 uppercase tracking-wide">
-                    {t('editor.propertiesSidebar.title')}
-                  </span>
-                  {activeClipHeader && (
+                  <span className="shrink-0 uppercase tracking-wide">{headerLabel}</span>
+                  {headerContext && (
                     <>
                       <span className="shrink-0">-</span>
-                      <span
-                        className="truncate normal-case tracking-normal"
-                        title={activeClipHeader.title}
-                      >
-                        {activeClipHeader.text}
+                      <span className="truncate normal-case tracking-normal" title={headerTitle}>
+                        {headerContext}
                       </span>
                     </>
                   )}
@@ -303,7 +329,13 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
             </div>
 
             {/* Properties Panel */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 [scrollbar-gutter:stable]">
+            <div
+              className={
+                workspace === 'motion' && clipInspectorTab === 'motion' && hasClipSelection
+                  ? 'min-h-0 flex-1 overflow-hidden p-3'
+                  : 'flex-1 overflow-y-auto overflow-x-hidden p-3 [scrollbar-gutter:stable]'
+              }
+            >
               {selectedTransitionId ? (
                 <Suspense fallback={null}>
                   <LazyTransitionPanel />
@@ -318,14 +350,24 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
                       its chunk resolves it stays subscribed while hidden, so a
                       selection made during playback can commit synchronously
                       instead of waiting for a starved Suspense retry. */}
-                  <div hidden={!hasClipSelection}>
+                  <div
+                    data-testid="properties-clip-panel-host"
+                    hidden={!hasClipSelection}
+                    className={
+                      workspace === 'motion' && clipInspectorTab === 'motion'
+                        ? 'h-full min-h-0'
+                        : undefined
+                    }
+                  >
                     <Suspense fallback={<PropertiesPanelLoadingFallback />}>
                       <LazyClipPanel />
                     </Suspense>
                   </div>
-                  <div hidden={hasClipSelection}>
-                    <CanvasPanel />
-                  </div>
+                  {!hasClipSelection && (
+                    <div>
+                      <CanvasPanel />
+                    </div>
+                  )}
                 </>
               )}
             </div>

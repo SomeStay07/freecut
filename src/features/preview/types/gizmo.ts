@@ -43,6 +43,8 @@ export interface Point {
  * Gizmo interaction state during drag operations.
  */
 export interface GizmoState {
+  /** Monotonic token used to keep deferred cleanup scoped to this drag. */
+  interactionId: number
   /** Current interaction mode */
   mode: GizmoMode
   /** Active scale/rotate handle (null for translate) */
@@ -71,6 +73,7 @@ export interface GizmoState {
     | 'shape'
     | 'adjustment'
     | 'composition'
+    | 'controller'
     | 'subtitle'
   /** Whether aspect ratio is locked for this item (from item.transform.aspectRatioLocked) */
   aspectRatioLocked?: boolean

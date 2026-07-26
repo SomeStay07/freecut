@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, memo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useMaskEditorStore } from '../stores/mask-editor-store'
 import { useGizmoStore } from '../stores/gizmo-store'
 import {
@@ -69,8 +70,10 @@ import {
 import {
   getAutoKeyframeOperation,
   isFrameInTransitionRegion,
+  resolveAnimatedShapeItem,
   type AutoKeyframeOperation,
 } from '../deps/keyframes'
+import { buildPathGeometryPersistence as planPathGeometryPersistence } from '../utils/path-geometry-persistence'
 
 /** Radius of vertex control points in screen pixels */
 const VERTEX_RADIUS = 5
@@ -141,6 +144,7 @@ type EditDragState =
   | {
       type: 'shape'
       startTransform: Transform
+      interactionId: number
     }
   | {
       type: 'marquee'
@@ -237,6 +241,24 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   const clearInteraction = useGizmoStore((s) => s.clearInteraction)
   const effectiveItemTransform = committedEditSnapshot?.transform ?? itemTransform
 
+  const buildPathGeometryPersistence = useCallback(
+    (item: ShapeItem, nextVertices: MaskVertex[], currentFrame: number) => {
+      const result = planPathGeometryPersistence({
+        item,
+        itemKeyframes: useKeyframesStore.getState().keyframesByItemId[item.id],
+        nextVertices,
+        currentFrame,
+      })
+      if (result.blocked === 'topology') {
+        toast.error('Path topology cannot change while Path Geometry has keyframes.')
+      } else if (result.blocked === 'frame') {
+        toast.error('Path Geometry keyframes cannot be added at this frame.')
+      }
+      return result
+    },
+    [],
+  )
+
   // ============================================================
   // Shared coordinate helpers
   // ============================================================
@@ -307,7 +329,11 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     const items = useItemsStore.getState().items
     const item = items.find((i) => i.id === editingItemId)
     if (item?.type === 'shape' && item.shapeType === 'path') {
-      return item.pathVertices ?? null
+      const currentFrame = usePlaybackStore.getState().currentFrame
+      const itemKeyframes = useKeyframesStore.getState().keyframesByItemId[item.id]
+      return (
+        resolveAnimatedShapeItem(item, itemKeyframes, currentFrame - item.from).pathVertices ?? null
+      )
     }
     return null
   }, [committedEditSnapshot, editingItemId, previewVertices])
@@ -1263,6 +1289,8 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   const itemTransformRef = useRef(effectiveItemTransform)
   itemTransformRef.current = effectiveItemTransform
   const pendingCleanupRafIdsRef = useRef<number[]>([])
+  const editInteractionGenerationRef = useRef(0)
+  const maskOwnedInteractionIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     return () => {
@@ -1270,31 +1298,42 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         cancelAnimationFrame(id)
       }
       pendingCleanupRafIdsRef.current = []
-      const activeGizmo = useGizmoStore.getState().activeGizmo
-      if (activeGizmo?.itemId === editingItemIdRef.current) {
-        useGizmoStore.getState().clearInteraction()
+      const ownedInteractionId = maskOwnedInteractionIdRef.current
+      if (ownedInteractionId !== null) {
+        useGizmoStore.getState().clearInteraction(ownedInteractionId)
+        maskOwnedInteractionIdRef.current = null
       }
     }
   }, [])
 
-  const scheduleEditCommitCleanup = useCallback(() => {
-    for (const id of pendingCleanupRafIdsRef.current) {
-      cancelAnimationFrame(id)
-    }
-    pendingCleanupRafIdsRef.current = []
+  const scheduleEditCommitCleanup = useCallback(
+    (expectedInteractionId?: number) => {
+      for (const id of pendingCleanupRafIdsRef.current) {
+        cancelAnimationFrame(id)
+      }
+      pendingCleanupRafIdsRef.current = []
+      const scheduledGeneration = editInteractionGenerationRef.current
 
-    const firstFrameId = requestAnimationFrame(() => {
-      const secondFrameId = requestAnimationFrame(() => {
-        pendingCleanupRafIdsRef.current = []
-        setCommittedEditSnapshot(null)
-        clearInteraction()
-        endDrag()
+      const firstFrameId = requestAnimationFrame(() => {
+        const secondFrameId = requestAnimationFrame(() => {
+          if (editInteractionGenerationRef.current !== scheduledGeneration) return
+          pendingCleanupRafIdsRef.current = []
+          setCommittedEditSnapshot(null)
+          if (expectedInteractionId !== undefined) {
+            clearInteraction(expectedInteractionId)
+            if (maskOwnedInteractionIdRef.current === expectedInteractionId) {
+              maskOwnedInteractionIdRef.current = null
+            }
+          }
+          endDrag()
+        })
+        pendingCleanupRafIdsRef.current = [firstFrameId, secondFrameId]
       })
-      pendingCleanupRafIdsRef.current = [firstFrameId, secondFrameId]
-    })
 
-    pendingCleanupRafIdsRef.current = [firstFrameId]
-  }, [clearInteraction, endDrag])
+      pendingCleanupRafIdsRef.current = [firstFrameId]
+    },
+    [clearInteraction, endDrag],
+  )
 
   const buildMaskTransformPersistence = useCallback(
     (
@@ -1376,7 +1415,30 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const item = useItemsStore.getState().itemById[editingItemId]
       if (item?.type === 'shape' && item.shapeType === 'path') {
         const currentFrame = usePlaybackStore.getState().currentFrame
+        const directPathPersistence = buildPathGeometryPersistence(item, vertices, currentFrame)
+        if (directPathPersistence.blocked) {
+          scheduleEditCommitCleanup()
+          return
+        }
+        if (directPathPersistence.pathVertices === undefined) {
+          setCommittedEditSnapshot({
+            vertices: cloneVertices(vertices),
+            transform: itemTransform,
+          })
+          commitMaskEdit(editingItemId, {
+            autoKeyframeOperations: directPathPersistence.autoKeyframeOperations,
+          })
+          scheduleEditCommitCleanup()
+          return
+        }
+
         const fitted = fitShapePathToBounds(vertices, itemTransform, item.transform)
+        const pathPersistence = buildPathGeometryPersistence(
+          item,
+          fitted.pathVertices,
+          currentFrame,
+        )
+        if (pathPersistence.blocked) return
         const { baseTransform, autoKeyframeOperations } = buildMaskTransformPersistence(
           item,
           {
@@ -1392,15 +1454,19 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
           transform: toOverlayTransform(fitted.transform, itemTransform),
         })
         commitMaskEdit(editingItemId, {
-          pathVertices: cloneVertices(fitted.pathVertices),
+          pathVertices: pathPersistence.pathVertices,
           transform: baseTransform,
-          autoKeyframeOperations,
+          autoKeyframeOperations: [
+            ...autoKeyframeOperations,
+            ...pathPersistence.autoKeyframeOperations,
+          ],
         })
         scheduleEditCommitCleanup()
       }
     },
     [
       buildMaskTransformPersistence,
+      buildPathGeometryPersistence,
       commitMaskEdit,
       editingItemId,
       itemTransform,
@@ -1553,6 +1619,18 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
 
+      editInteractionGenerationRef.current += 1
+      for (const id of pendingCleanupRafIdsRef.current) {
+        cancelAnimationFrame(id)
+      }
+      pendingCleanupRafIdsRef.current = []
+      setCommittedEditSnapshot(null)
+      const previousOwnedInteractionId = maskOwnedInteractionIdRef.current
+      if (previousOwnedInteractionId !== null) {
+        clearInteraction(previousOwnedInteractionId)
+        maskOwnedInteractionIdRef.current = null
+      }
+
       const localX = e.clientX - rect.left
       const localY = e.clientY - rect.top
       const hit = hitTest(localX, localY)
@@ -1609,10 +1687,18 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         const itemId = editingItemIdRef.current
         if (!itemId) return
 
-        startTranslate(itemId, canvasPos, itemTransformRef.current)
+        const interactionId = startTranslate(
+          itemId,
+          canvasPos,
+          itemTransformRef.current,
+          undefined,
+          'shape',
+        )
+        maskOwnedInteractionIdRef.current = interactionId
         dragStateRef.current = {
           type: 'shape',
           startTransform: itemTransformRef.current,
+          interactionId,
         }
         setHoveredSegmentIndex(null)
         setHover(null)
@@ -1626,6 +1712,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       startVertexDrag,
       startHandleDrag,
       setHover,
+      clearInteraction,
       startTranslate,
     ],
   )
@@ -1793,33 +1880,9 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
             )
           }
         }
-        scheduleEditCommitCleanup()
+        scheduleEditCommitCleanup(state.interactionId)
       } else if (finalVertices && itemId) {
-        const item = useItemsStore.getState().items.find((candidate) => candidate.id === itemId)
-        if (item?.type === 'shape' && item.shapeType === 'path') {
-          const currentFrame = usePlaybackStore.getState().currentFrame
-          const fitted = fitShapePathToBounds(finalVertices, itemTransform, item.transform)
-          const { baseTransform, autoKeyframeOperations } = buildMaskTransformPersistence(
-            item,
-            {
-              x: fitted.transform.x,
-              y: fitted.transform.y,
-              width: fitted.transform.width,
-              height: fitted.transform.height,
-            },
-            currentFrame,
-          )
-          setCommittedEditSnapshot({
-            vertices: cloneVertices(fitted.pathVertices),
-            transform: toOverlayTransform(fitted.transform, itemTransform),
-          })
-          commitMaskEdit(itemId, {
-            pathVertices: cloneVertices(fitted.pathVertices),
-            transform: baseTransform,
-            autoKeyframeOperations,
-          })
-        }
-        scheduleEditCommitCleanup()
+        commitVertices(finalVertices)
       } else {
         scheduleEditCommitCleanup()
       }
@@ -1829,10 +1892,10 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     [
       buildMaskTransformPersistence,
       commitMaskEdit,
+      commitVertices,
       endInteraction,
       getMarqueeBounds,
       getVerticesInMarquee,
-      itemTransform,
       scheduleEditCommitCleanup,
       selectVertex,
       selectVertices,

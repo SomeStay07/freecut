@@ -11,6 +11,8 @@
  */
 export interface SegmentSpan<T> {
   from: T
+  fromFrame: number
+  toFrame: number
   left: number
   width: number
 }
@@ -27,7 +29,7 @@ export function buildSegmentSpans<T>(
     const left = Math.min(a.x, b.x)
     const width = Math.abs(b.x - a.x)
     if (width > 0) {
-      spans.push({ from: a.from, left, width })
+      spans.push({ from: a.from, fromFrame: a.frame, toFrame: b.frame, left, width })
     }
   }
   return spans

@@ -30,15 +30,8 @@ describe('ShapeContent', () => {
     const { container } = render(
       <ItemVisualTransformProvider
         value={{
-          x: 0,
-          y: 0,
           width: 480,
           height: 270,
-          anchorX: 240,
-          anchorY: 135,
-          rotation: 0,
-          opacity: 1,
-          cornerRadius: 0,
         }}
       >
         <ShapeContent item={shape} />
@@ -70,6 +63,42 @@ describe('ShapeContent', () => {
     expect(path).toHaveAttribute('stroke-dashoffset', '-50')
   })
 
+  it('renders a Shape property linked to another layer scalar', () => {
+    const source: ShapeItem = {
+      ...shape,
+      id: 'source-shape',
+      label: 'Source shape',
+      transform: { ...shape.transform, x: 50 },
+    }
+    const target = { ...shape, strokeColor: '#ffffff', strokeWidth: 4 }
+    const { container } = render(
+      <KeyframesProvider
+        keyframes={[
+          {
+            itemId: target.id,
+            properties: [],
+            expressions: [
+              {
+                type: 'link',
+                targetProperty: 'trimPathEnd',
+                sourceItemId: source.id,
+                sourceProperty: 'x',
+                enabled: true,
+                timeOffsetFrames: 0,
+              },
+            ],
+          },
+        ]}
+        items={[target, source]}
+        canvas={{ width: 1920, height: 1080, fps: 30 }}
+      >
+        <ShapeContent item={target} />
+      </KeyframesProvider>,
+    )
+
+    expect(container.querySelector('path')).toHaveAttribute('stroke-dasharray', '50 50')
+  })
+
   it('updates trim offset immediately from the live properties preview', () => {
     const { container } = render(
       <ShapeContent
@@ -90,6 +119,42 @@ describe('ShapeContent', () => {
       })
     })
     expect(container.querySelector('path')).toHaveAttribute('stroke-dashoffset', '-25')
+  })
+
+  it('renders and live-previews the additive two-stop linear gradient fill', () => {
+    const { container } = render(
+      <ShapeContent
+        item={{
+          ...shape,
+          fillType: 'linear',
+          gradientStartColor: '#112233',
+          gradientEndColor: '#aabbcc',
+          gradientAngle: 0,
+        }}
+      />,
+    )
+
+    const gradient = container.querySelector('linearGradient')
+    expect(gradient).toHaveAttribute('gradientUnits', 'userSpaceOnUse')
+    expect(gradient).toHaveAttribute('x1', '0')
+    expect(gradient).toHaveAttribute('y1', '50')
+    expect(gradient).toHaveAttribute('x2', '200')
+    expect(gradient).toHaveAttribute('y2', '50')
+    expect(container.querySelectorAll('stop')[0]).toHaveAttribute('stop-color', '#112233')
+    expect(container.querySelectorAll('stop')[1]).toHaveAttribute('stop-color', '#aabbcc')
+    expect(container.querySelector('path')?.getAttribute('fill')).toMatch(/^url\(#shape-gradient-/)
+
+    act(() => {
+      useGizmoStore.getState().setPropertiesPreviewNew({
+        [shape.id]: { gradientAngle: 90, gradientEndColor: '#ff00ff' },
+      })
+    })
+
+    expect(Number(container.querySelector('linearGradient')?.getAttribute('x1'))).toBeCloseTo(100)
+    expect(container.querySelector('linearGradient')).toHaveAttribute('y1', '0')
+    expect(Number(container.querySelector('linearGradient')?.getAttribute('x2'))).toBeCloseTo(100)
+    expect(container.querySelector('linearGradient')).toHaveAttribute('y2', '100')
+    expect(container.querySelectorAll('stop')[1]).toHaveAttribute('stop-color', '#ff00ff')
   })
 
   it('derives a missing shared-sequence offset from the sequence context', () => {

@@ -38,6 +38,7 @@ import {
 import { needsCustomAudioDecoder } from '../utils/audio-codec-detection'
 import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
 import { useNestedMediaResolutionMode } from '../contexts/nested-media-resolution-context'
+import { useLiveItemContentTransform } from '../contexts/live-item-transform-context'
 
 function getLogger() {
   return createLogger('CompositionItem')
@@ -164,6 +165,8 @@ export const ItemContent = React.memo<ItemProps>(
     audioPitchShiftSemitones = 0,
     renderCompositionContent,
   }) => {
+    item = useLiveItemContentTransform(item)
+
     // Use muted prop directly - MainComposition already passes track.muted
     // Avoiding store subscription here prevents re-render issues with @legacy-video/media Audio
 
@@ -202,6 +205,12 @@ export const ItemContent = React.memo<ItemProps>(
         }),
       [item.audioPitchSemitones, item.audioPitchCents, itemPreviewProperties],
     )
+
+    // Null Objects participate in transform hierarchy and canvas gizmo
+    // interactions, but intentionally contribute no pixels of their own.
+    if (item.type === 'controller') {
+      return null
+    }
 
     if (item.type === 'video') {
       item = resolveReverseConformedVideoItem(item, timelineFps, {
@@ -600,7 +609,16 @@ export const ItemContent = React.memo<ItemProps>(
       // Render sub-composition contents inline
       // Pass parent muted so muting the track silences all sub-comp audio
       return (
-        <ItemVisualWrapper item={item} masks={masks}>
+        <ItemVisualWrapper
+          item={item}
+          masks={masks}
+          mediaContent={{
+            fitMode: 'fill',
+            sourceWidth: item.compositionWidth,
+            sourceHeight: item.compositionHeight,
+            crop: item.crop,
+          }}
+        >
           {renderCompositionContent({
             item,
             parentMuted: muted,

@@ -4,10 +4,7 @@
  */
 
 export type { TimelineState, TimelineActions } from '@/features/timeline/types'
-export type { MotionPresetClear } from '@/features/timeline/stores/actions/keyframe-actions'
-export {
-  useTimelineStore,
-} from '@/features/timeline/stores/timeline-store'
+export { useTimelineStore } from '@/features/timeline/stores/timeline-store'
 export { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
 export { useItemsStore } from '@/features/timeline/stores/items-store'
 export { useKeyframesStore } from '@/features/timeline/stores/keyframes-store'
@@ -20,18 +17,36 @@ export { useTimelineCommandStore } from '@/features/timeline/stores/timeline-com
 export { execute as executeTimelineCommand } from '@/features/timeline/stores/actions/shared'
 export { captureSnapshot } from '@/features/timeline/stores/commands/snapshot'
 export { rateStretchItemWithoutHistory } from '@/features/timeline/stores/actions/item-edit-actions'
-export { repairCompositeCompositionEditorialLeak } from '@/features/timeline/stores/actions/composition-actions'
+export {
+  addCompositionControl,
+  removeCompositionControl,
+  renameCompositionControl,
+  repairCompositeCompositionEditorialLeak,
+  setCompositionCanvasSettings,
+  setCompositionDuration,
+  trimCompositionToActiveRegion,
+} from '@/features/timeline/stores/actions/composition-editor-actions'
 export { setInOutPointsWithoutHistory } from '@/features/timeline/stores/actions/marker-actions'
 export { applyAnimationPreset } from '@/features/timeline/stores/actions/preset-actions'
 export {
   applyMotionPresetKeyframes,
+  removePresetKeyframeApplication,
+  removeManualKeyframes,
+  trimAnimationToItemBounds,
+} from '@/features/timeline/stores/actions/keyframe-actions'
+export type {
+  MotionPresetClear,
+  MotionPresetVectorApply,
 } from '@/features/timeline/stores/actions/keyframe-actions'
 export {
+  applyMotionLayersToItems,
+  removeMotionLayerFromItems,
   applyMotionModifierToItems,
   updateMotionModifiersLive,
   beginMotionModifierEdit,
   commitMotionModifierEdit,
   removeMotionModifierFromItems,
+  removeAudioPulseFromItems,
   bakeMotionToKeyframes,
 } from '@/features/timeline/stores/actions/motion-modifier-actions'
 export {
@@ -45,3 +60,7 @@ export {
   captureAnimationFromItem,
   getPresetCompatibility,
 } from '@/features/timeline/deps/keyframe-editors'
+export {
+  createMotionClip,
+  openComposition,
+} from '@/features/timeline/stores/actions/composition-actions'

@@ -37,6 +37,7 @@ import {
 } from '../utils/transition-utils'
 import {
   applyMovePreview,
+  applySlidePreview,
   applySlipPreview,
   applyTrimEndPreview,
   applyTrimStartPreview,
@@ -246,6 +247,8 @@ export function useTimelineSlipSlide(
   const latestDeltaRef = useRef(0)
   const pendingStartCleanupRef = useRef<(() => void) | null>(null)
   const slideGestureContextRef = useRef<SlideGestureContext | null>(null)
+  const snapEnabledRef = useRef(snapEnabled)
+  snapEnabledRef.current = snapEnabled
 
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item
@@ -302,7 +305,10 @@ export function useTimelineSlipSlide(
         [currentItem.id, leftNeighbor?.id ?? '', rightNeighbor?.id ?? ''].filter(Boolean),
       )
       const snapExcludeIds = new Set<string>(slideItemIds)
-      const snapTargets = snapEnabled ? getMagneticSnapTargets() : []
+      // Cache targets for the whole gesture even when snapping starts disabled.
+      // This lets S enable snapping mid-drag without rebuilding the gesture
+      // context (which also owns the stable preview bounds).
+      const snapTargets = getMagneticSnapTargets()
       const primaryNearestNeighbors = findNearestNeighbors(currentItem, allItems)
       const leftNeighborNearestStart = leftNeighbor
         ? findNearestStartAtOrAfter(leftNeighbor, allItems, slideItemIds)
@@ -372,7 +378,7 @@ export function useTimelineSlipSlide(
         relatedTransitions,
       }
     },
-    [getMagneticSnapTargets, snapEnabled],
+    [getMagneticSnapTargets],
   )
 
   const beginSlipSlideGesture = useCallback(
@@ -945,7 +951,7 @@ export function useTimelineSlipSlide(
         const storeItem = slideContext?.currentItem ?? getItemFromStore()
 
         // Apply snapping for slide (clip edges snap to items/playhead/grid)
-        if (snapEnabled) {
+        if (snapEnabledRef.current) {
           const targets = slideContext?.snapTargets ?? getMagneticSnapTargets()
           const excludeIds =
             slideContext?.snapExcludeIds ??
@@ -1086,28 +1092,44 @@ export function useTimelineSlipSlide(
         const linkedPreviewUpdates: PreviewItemUpdate[] = []
 
         if (synchronizedCounterpart) {
-          linkedPreviewUpdates.push(applyMovePreview(synchronizedCounterpart, clamped))
+          const counterpartContext = slideContext?.participantContexts.find(
+            ({ participant }) => participant.id === synchronizedCounterpart.id,
+          )
+          const leftCounterpart = counterpartContext
+            ? counterpartContext.leftAdjacent
+            : slideContext
+              ? slideContext.leftCounterpart
+              : leftNeighborId
+                ? getMatchingSynchronizedLinkedCounterpart(
+                    allItems,
+                    leftNeighborId,
+                    synchronizedCounterpart.trackId,
+                    synchronizedCounterpart.type,
+                  )
+                : null
+          const rightCounterpart = counterpartContext
+            ? counterpartContext.rightAdjacent
+            : slideContext
+              ? slideContext.rightCounterpart
+              : rightNeighborId
+                ? getMatchingSynchronizedLinkedCounterpart(
+                    allItems,
+                    rightNeighborId,
+                    synchronizedCounterpart.trackId,
+                    synchronizedCounterpart.type,
+                  )
+                : null
 
-          const leftCounterpart = slideContext
-            ? slideContext.leftCounterpart
-            : leftNeighborId
-              ? getMatchingSynchronizedLinkedCounterpart(
-                  allItems,
-                  leftNeighborId,
-                  synchronizedCounterpart.trackId,
-                  synchronizedCounterpart.type,
-                )
-              : null
-          const rightCounterpart = slideContext
-            ? slideContext.rightCounterpart
-            : rightNeighborId
-              ? getMatchingSynchronizedLinkedCounterpart(
-                  allItems,
-                  rightNeighborId,
-                  synchronizedCounterpart.trackId,
-                  synchronizedCounterpart.type,
-                )
-              : null
+          const sourceDelta = computeSlideContinuitySourceDelta(
+            synchronizedCounterpart,
+            leftCounterpart,
+            rightCounterpart,
+            clamped,
+            fps,
+          )
+          linkedPreviewUpdates.push(
+            applySlidePreview(synchronizedCounterpart, clamped, sourceDelta),
+          )
 
           if (leftCounterpart) {
             linkedPreviewUpdates.push(applyTrimEndPreview(leftCounterpart, clamped, fps))
@@ -1130,7 +1152,6 @@ export function useTimelineSlipSlide(
       clampSlideDelta,
       clampSlideDeltaToPreserveTransitionsWithContext,
       clampSlideDeltaWithContext,
-      snapEnabled,
       getMagneticSnapTargets,
       getSnapThresholdFrames,
     ],
@@ -1185,22 +1206,22 @@ export function useTimelineSlipSlide(
       return () => {
         window.removeEventListener('mousemove', handleMouseMove)
         window.removeEventListener('mouseup', handleMouseUp)
-        // If unmounting mid-drag, clear preview and drag state
-        if (stateRef.current.isActive) {
-          useSlipEditPreviewStore.getState().clearPreview()
-          useSlideEditPreviewStore.getState().clearPreview()
-          useLinkedEditPreviewStore.getState().clear()
-          setDragState(null)
-          latestDeltaRef.current = 0
-          slideGestureContextRef.current = null
-        }
       }
     }
-  }, [state.isActive, handleMouseMove, handleMouseUp, setDragState])
+  }, [state.isActive, handleMouseMove, handleMouseUp])
 
   useEffect(
     () => () => {
       pendingStartCleanupRef.current?.()
+      // Effect dependency changes may replace the window listeners during an
+      // active gesture. Only a true unmount should abandon its preview state.
+      if (stateRef.current.isActive) {
+        useSlipEditPreviewStore.getState().clearPreview()
+        useSlideEditPreviewStore.getState().clearPreview()
+        useLinkedEditPreviewStore.getState().clear()
+        useSelectionStore.getState().setDragState(null)
+        latestDeltaRef.current = 0
+      }
       slideGestureContextRef.current = null
     },
     [],

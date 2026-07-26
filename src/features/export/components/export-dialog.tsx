@@ -390,17 +390,25 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
   // Check if in/out points are set
   const hasInOutPoints = inPoint !== null && outPoint !== null && outPoint > inPoint
-  const hasTranscriptSubtitles = useMemo(
-    () =>
-      items.some(
-        (item) =>
-          (item.type === 'subtitle' && item.source.type === 'transcript') ||
-          ((item.type === 'video' || item.type === 'audio') &&
-            item.transcriptCaptions?.enabled === true &&
-            item.transcriptCaptions.type === 'transcript'),
-      ),
-    [items],
-  )
+  const hasTranscriptSubtitles = useMemo(() => {
+    const reversedClipIds = new Set(
+      items
+        .filter(
+          (item) => (item.type === 'video' || item.type === 'audio') && item.isReversed === true,
+        )
+        .map((item) => item.id),
+    )
+    return items.some(
+      (item) =>
+        (item.type === 'subtitle' &&
+          item.source.type === 'transcript' &&
+          !reversedClipIds.has(item.source.clipId)) ||
+        ((item.type === 'video' || item.type === 'audio') &&
+          item.isReversed !== true &&
+          item.transcriptCaptions?.enabled === true &&
+          item.transcriptCaptions.type === 'transcript'),
+    )
+  }, [items])
   // Soft (toggleable) subtitle tracks only work for Matroska (WebM/MKV). MP4/MOV
   // can't — mediabunny's WebVTT-in-ISOBMFF muxing is broken and players barely
   // support it anyway — so the "Embedded track" option is hidden there.
@@ -1565,8 +1573,7 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
                 </div>
                 <div className="flex items-center justify-between text-sm gap-2">
                   <span className="text-muted-foreground truncate">
-                    {status === 'preparing' &&
-                      (progressMessage ?? t('export.progress.preparing'))}
+                    {status === 'preparing' && (progressMessage ?? t('export.progress.preparing'))}
                     {status === 'rendering' && t('export.progress.rendering')}
                     {status === 'encoding' && t('export.progress.encoding')}
                     {status === 'finalizing' && t('export.progress.finalizing')}

@@ -12,11 +12,13 @@ import { getAttachedCaptionItemIds } from '../../../utils/linked-items'
 import { computeClampedSlipDelta } from '../../../utils/slip-utils'
 import { computeSlideContinuitySourceDelta } from '../../../utils/slide-utils'
 import { clampSlideDeltaToPreserveKeyframes } from '../../../utils/slide-keyframe-constraints'
+import { isMediaItem } from '../../../utils/source-calculations'
 import {
   clampRippleTrimDeltaToPreserveEditState,
   clampRollingTrimDeltaToPreserveEditState,
 } from '../../../utils/trim-edit-constraints'
 import { clampToAdjacentItems, clampTrimAmount } from '../../../utils/trim-utils'
+import { getTransitionLinkedIds } from '../../items-store-indexes'
 import {
   clampSlideDeltaToPreserveTransitions,
   clampSlipDeltaToPreserveTransitions,
@@ -136,21 +138,47 @@ function trimAttachedCaptionsToClipBounds(clipIds: Iterable<string>): string[] {
   return [...captionUpdates.map((update) => update.id), ...captionIdsToRemove]
 }
 
-function applySynchronizedTrim(id: string, handle: 'start' | 'end', trimAmount: number): void {
+function applySynchronizedTrim(
+  id: string,
+  handle: 'start' | 'end',
+  trimAmount: number,
+  forceLinked: boolean,
+): void {
   const itemsStore = useItemsStore.getState()
   const itemsBefore = itemsStore.items
   const synchronizedItems = getSynchronizedLinkedItemsForEdit(
     itemsBefore,
     id,
-    isLinkedSelectionEnabled(),
+    forceLinked || isLinkedSelectionEnabled(),
   )
   const anchorBefore = synchronizedItems.find((item) => item.id === id)
   if (!anchorBefore) return
 
+  const timelineFps = useTimelineSettingsStore.getState().fps
+  let synchronizedTrimAmount = trimAmount
+  for (const synchronizedItem of synchronizedItems) {
+    const sourceClampedAmount = clampTrimAmount(
+      synchronizedItem,
+      handle,
+      synchronizedTrimAmount,
+      timelineFps,
+    ).clampedAmount
+    synchronizedTrimAmount = keepTightestDelta(
+      synchronizedTrimAmount,
+      clampToAdjacentItems(
+        synchronizedItem,
+        handle,
+        sourceClampedAmount,
+        itemsBefore,
+        getTransitionLinkedIds(synchronizedItem.id),
+      ),
+    )
+  }
+
   if (handle === 'start') {
-    itemsStore._trimItemStart(id, trimAmount)
+    itemsStore._trimItemStart(id, synchronizedTrimAmount, { skipAdjacentClamp: true })
   } else {
-    itemsStore._trimItemEnd(id, trimAmount)
+    itemsStore._trimItemEnd(id, synchronizedTrimAmount, { skipAdjacentClamp: true })
   }
 
   const anchorAfter = useItemsStore.getState().itemById[id]
@@ -187,21 +215,29 @@ function applySynchronizedTrim(id: string, handle: 'start' | 'end', trimAmount: 
   useTimelineSettingsStore.getState().markDirty()
 }
 
-export function trimItemStart(id: string, trimAmount: number): void {
+export function trimItemStart(
+  id: string,
+  trimAmount: number,
+  options: { forceLinked?: boolean } = {},
+): void {
   execute(
     'TRIM_ITEM_START',
     () => {
-      applySynchronizedTrim(id, 'start', trimAmount)
+      applySynchronizedTrim(id, 'start', trimAmount, options.forceLinked === true)
     },
     { id, trimAmount },
   )
 }
 
-export function trimItemEnd(id: string, trimAmount: number): void {
+export function trimItemEnd(
+  id: string,
+  trimAmount: number,
+  options: { forceLinked?: boolean } = {},
+): void {
   execute(
     'TRIM_ITEM_END',
     () => {
-      applySynchronizedTrim(id, 'end', trimAmount)
+      applySynchronizedTrim(id, 'end', trimAmount, options.forceLinked === true)
     },
     { id, trimAmount },
   )
@@ -220,7 +256,7 @@ export function trimItemBreakingTransition(
         useTransitionsStore.getState()._removeTransitions(transitionIdsToRemove)
       }
 
-      applySynchronizedTrim(id, handle, trimAmount)
+      applySynchronizedTrim(id, handle, trimAmount, false)
     },
     {
       id,
@@ -273,6 +309,7 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
             keyframesByItemId,
             timelineFps,
             syncedIds,
+            false,
           ),
         )
       }
@@ -423,6 +460,7 @@ export function rollingTrimItems(leftId: string, rightId: string, editPointDelta
         transitions,
         keyframesByItemId,
         timelineFps,
+        false,
       )
       if (counterpartPair) {
         clampedEditPointDelta = keepTightestDelta(
@@ -436,6 +474,7 @@ export function rollingTrimItems(leftId: string, rightId: string, editPointDelta
             transitions,
             keyframesByItemId,
             timelineFps,
+            false,
           ),
         )
       }
@@ -696,7 +735,7 @@ export function slideItem(
       )
       if (clampedSlideDelta === 0) return
       const itemFromBefore = item.from
-      const itemSourceStartBefore = item.sourceStart
+      const itemSourceStartBefore = item.sourceStart ?? 0
 
       // For split-contiguous A-B-C chains, preserve source continuity by shifting
       // the slid clip's source window by the same source-space delta as slide.
@@ -743,7 +782,7 @@ export function slideItem(
       const updatedItem = useItemsStore.getState().itemById[id]
       const actualSlideDelta = updatedItem ? updatedItem.from - itemFromBefore : 0
       const actualSourceDelta =
-        updatedItem && itemSourceStartBefore !== undefined && updatedItem.sourceStart !== undefined
+        updatedItem && updatedItem.sourceStart !== undefined
           ? updatedItem.sourceStart - itemSourceStartBefore
           : 0
 
@@ -773,7 +812,7 @@ export function slideItem(
         )
         if (
           actualSourceDelta !== 0 &&
-          (synchronizedCounterpart.type === 'video' || synchronizedCounterpart.type === 'audio') &&
+          isMediaItem(synchronizedCounterpart) &&
           synchronizedCounterpart.sourceEnd !== undefined
         ) {
           itemsStore._updateItem(synchronizedCounterpart.id, {

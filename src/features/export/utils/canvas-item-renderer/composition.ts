@@ -24,7 +24,8 @@ import {
 } from '../render-span'
 import type { CanvasSettings, ItemRenderContext, ItemTransform, SubCompRenderData } from './types'
 import { log } from './shared'
-import { calculateMediaDrawDimensions } from './media-draw'
+import { drawContainedMediaSource } from './media-draw'
+import { resolveSubCompRenderDataForInstance } from './composition-instance'
 
 /**
  * Render a CompositionItem by rendering all its sub-composition items to an
@@ -41,7 +42,7 @@ export async function renderCompositionItem(
   rctx: ItemRenderContext,
   renderSpan?: RenderTimelineSpan,
 ): Promise<void> {
-  const subData = rctx.subCompRenderData.get(item.compositionId)
+  const subData = resolveSubCompRenderDataForInstance(item, rctx)
   if (!subData) {
     if (frame === 0) {
       log.warn('renderCompositionItem: no subCompRenderData found', {
@@ -115,6 +116,7 @@ export async function renderCompositionItem(
       bitmapMask?: OffscreenCanvas
       inverted: boolean
       feather: number
+      opacity: number
       maskType: 'clip' | 'alpha'
       trackOrder: number
     }> = []
@@ -176,7 +178,7 @@ export async function renderCompositionItem(
         }
         // Adjustment layers are applied via getAdjustmentLayerEffects; they
         // are not renderable visible content themselves.
-        if (subItem.type === 'adjustment') {
+        if (subItem.type === 'adjustment' || subItem.type === 'controller') {
           continue
         }
 
@@ -289,20 +291,19 @@ export async function renderCompositionItem(
 
     subCtx.drawImage(subContentCanvas, 0, 0)
 
-    // Draw the sub-composition result onto the main canvas at the CompositionItem's position
-    const drawDimensions = calculateMediaDrawDimensions(
+    // Crop the flattened sub-composition in wrapper space before parent-level
+    // effects, masks, and corner pinning are applied.
+    drawContainedMediaSource(
+      ctx,
+      subCanvas,
       subCanvas.width,
       subCanvas.height,
       transform,
       rctx.canvasSettings,
-    )
-
-    ctx.drawImage(
-      subCanvas,
-      drawDimensions.x,
-      drawDimensions.y,
-      drawDimensions.width,
-      drawDimensions.height,
+      item.crop,
+      undefined,
+      rctx.canvasPool,
+      'fill',
     )
   } finally {
     rctx.canvasPool.release(subContentCanvas)
@@ -320,6 +321,13 @@ export function createSubCompositionRenderContext(
   subData: SubCompRenderData,
   canvasSettings: CanvasSettings,
 ): ItemRenderContext {
+  const itemsById =
+    subData.itemsById ??
+    new Map(
+      subData.sortedTracks.flatMap((track) => track.items.map((item) => [item.id, item] as const)),
+    )
+  canvasSettings.getExpressionItem = (itemId) => itemsById.get(itemId)
+  canvasSettings.getExpressionKeyframes = (itemId) => subData.keyframesMap.get(itemId)
   return {
     ...rctx,
     fps: subData.fps,
@@ -374,6 +382,7 @@ export function getActiveSubCompMasks(
   bitmapMask?: OffscreenCanvas
   inverted: boolean
   feather: number
+  opacity: number
   maskType: 'clip' | 'alpha'
   trackOrder: number
 }> {
@@ -389,6 +398,7 @@ export function getActiveSubCompMasks(
     bitmapMask?: OffscreenCanvas
     inverted: boolean
     feather: number
+    opacity: number
     maskType: 'clip' | 'alpha'
     trackOrder: number
   }> = []
