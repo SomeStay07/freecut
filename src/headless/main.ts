@@ -61,6 +61,7 @@ import { seedMediaLibrary } from './seed-media'
 import {
   buildMediaMetadataMap,
   collectSourceRangeFindings,
+  collectTransitionFindings,
   hasAudioCapableItems,
 } from './validation'
 import { hasAudioContent } from '@/features/export/utils/canvas-audio'
@@ -148,6 +149,11 @@ interface HeadlessRenderWarning {
     | 'NO_AUDIO_IN_MIX'
     | ProjectWarning['code']
     | 'SOURCE_RANGE_EXCEEDED'
+    | 'TRANSITION_CLIP_NOT_FOUND'
+    | 'TRANSITION_CROSS_TRACK'
+    | 'TRANSITION_NOT_ADJACENT'
+    | 'TRANSITION_MISSING_PRESENTATION'
+    | 'TRANSITION_INVALID_DIRECTION'
   message: string
   details?: Record<string, unknown>
 }
@@ -181,6 +187,26 @@ function sourceRangeWarnings(
       `Item "${f.itemId}" needs ${f.neededSeconds.toFixed(2)}s of media "${f.mediaId}" ` +
       `but only ${f.availableSeconds.toFixed(2)}s exist — the tail renders black/silent`,
     details: { ...f },
+  }))
+}
+
+const TRANSITION_WARNING_CODES = {
+  clip_not_found: 'TRANSITION_CLIP_NOT_FOUND',
+  cross_track: 'TRANSITION_CROSS_TRACK',
+  not_adjacent: 'TRANSITION_NOT_ADJACENT',
+  missing_presentation: 'TRANSITION_MISSING_PRESENTATION',
+  invalid_direction: 'TRANSITION_INVALID_DIRECTION',
+} as const
+
+/** Transitions that would silently never render (or degrade to a hard cut). */
+function transitionWarnings(
+  transitions: readonly Transition[] | undefined,
+  items: readonly TimelineItem[],
+): HeadlessRenderWarning[] {
+  return collectTransitionFindings(transitions ?? [], items).map((f) => ({
+    code: TRANSITION_WARNING_CODES[f.kind],
+    message: f.message,
+    details: { transitionId: f.transitionId },
   }))
 }
 
@@ -218,6 +244,7 @@ function runLoadValidation(
   const validationWarnings = [
     ...(input.validationWarnings ?? []),
     ...sourceRangeWarnings(items, compositions, mediaById, fps),
+    ...transitionWarnings(input.transitions, items),
   ]
   reportValidationWarnings(validationWarnings, input.strict, 'render')
   return validationWarnings
@@ -701,6 +728,7 @@ async function renderFrame(input: HeadlessFrameInput): Promise<HeadlessFrameSumm
       buildMediaMetadataMap(input.media),
       view.fps,
     ),
+    ...transitionWarnings(view.transitions, view.items),
   ]
   reportValidationWarnings(validationWarnings, input.strict, 'frame')
 
@@ -773,6 +801,7 @@ function dumpLayout(input: HeadlessLayoutInput): HeadlessLayoutResult {
       buildMediaMetadataMap(input.media),
       view.fps,
     ),
+    ...transitionWarnings(view.transitions, view.items),
   ]
   reportValidationWarnings(validationWarnings, input.strict, 'layout')
 
