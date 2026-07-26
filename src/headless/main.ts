@@ -62,6 +62,7 @@ import {
   buildMediaMetadataMap,
   collectSourceRangeFindings,
   collectTransitionFindings,
+  collectTransformParentFindings,
   hasAudioCapableItems,
 } from './validation'
 import { hasAudioContent } from '@/features/export/utils/canvas-audio'
@@ -158,6 +159,9 @@ interface HeadlessRenderWarning {
     | 'TRANSITION_NOT_ADJACENT'
     | 'TRANSITION_MISSING_PRESENTATION'
     | 'TRANSITION_INVALID_DIRECTION'
+    | 'TRANSFORM_PARENT_NOT_FOUND'
+    | 'TRANSFORM_PARENT_CYCLE'
+    | 'TRANSFORM_PARENT_INVALID_TYPE'
   message: string
   details?: Record<string, unknown>
 }
@@ -214,6 +218,21 @@ function transitionWarnings(
   }))
 }
 
+const TRANSFORM_PARENT_WARNING_CODES = {
+  parent_not_found: 'TRANSFORM_PARENT_NOT_FOUND',
+  cycle: 'TRANSFORM_PARENT_CYCLE',
+  invalid_type: 'TRANSFORM_PARENT_INVALID_TYPE',
+} as const
+
+/** Transform-parent bindings that silently degrade (rig parts render unparented). */
+function transformParentWarnings(items: readonly TimelineItem[]): HeadlessRenderWarning[] {
+  return collectTransformParentFindings(items).map((f) => ({
+    code: TRANSFORM_PARENT_WARNING_CODES[f.kind],
+    message: f.message,
+    details: { itemId: f.itemId },
+  }))
+}
+
 /**
  * Warn (or throw in strict mode) when the composition has audio-capable items
  * but the extracted mix contains zero audible segments.
@@ -249,6 +268,7 @@ function runLoadValidation(
     ...(input.validationWarnings ?? []),
     ...sourceRangeWarnings(items, compositions, mediaById, fps),
     ...transitionWarnings(input.transitions, items),
+    ...transformParentWarnings(items),
   ]
   reportValidationWarnings(validationWarnings, input.strict, 'render')
   return validationWarnings
@@ -775,6 +795,7 @@ async function renderFrame(input: HeadlessFrameInput): Promise<HeadlessFrameSumm
       view.fps,
     ),
     ...transitionWarnings(view.transitions, view.items),
+    ...transformParentWarnings(view.items),
   ]
   reportValidationWarnings(validationWarnings, input.strict, 'frame')
 
@@ -923,6 +944,7 @@ async function dumpLayout(input: HeadlessLayoutInput): Promise<HeadlessLayoutRes
       view.fps,
     ),
     ...transitionWarnings(view.transitions, view.items),
+    ...transformParentWarnings(view.items),
   ]
   reportValidationWarnings(validationWarnings, input.strict, 'layout')
 
@@ -938,6 +960,19 @@ async function dumpLayout(input: HeadlessLayoutInput): Promise<HeadlessLayoutRes
   // width/wrap point comes from Chrome's fallback sans-serif.
   await ensureFontsLoaded(collectVisibleTextFontFamilies(composition.tracks), HEADLESS_FONT_WEIGHTS)
 
+  // Transform-parented items (rigs) must report WORLD coordinates — the same
+  // item index the export renderer uses to resolve parent chains.
+  const expressionItemsById = new Map(
+    composition.tracks.flatMap((track) =>
+      (track.items ?? []).map((item) => [item.id, item] as const),
+    ),
+  )
+  const layoutCanvas = {
+    ...canvas,
+    getExpressionItem: (itemId: string) => expressionItemsById.get(itemId),
+    getExpressionKeyframes: (itemId: string) => keyframesMap.get(itemId),
+  }
+
   const items: LayoutBox[] = []
   let z = 0
   // composition.tracks is already sorted descending by order (topmost track
@@ -949,7 +984,7 @@ async function dumpLayout(input: HeadlessLayoutInput): Promise<HeadlessLayoutRes
       if (item.type === 'audio') continue
       const active = frame >= item.from && frame < item.from + item.durationInFrames
       if (!active) continue
-      const t = getAnimatedTransform(item, keyframesMap.get(item.id), frame, canvas)
+      const t = getAnimatedTransform(item, keyframesMap.get(item.id), frame, layoutCanvas)
       const left = canvas.width / 2 + t.x - t.width / 2
       const top = canvas.height / 2 + t.y - t.height / 2
       const box: LayoutBox = {
