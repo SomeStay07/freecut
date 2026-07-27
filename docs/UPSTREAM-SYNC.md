@@ -53,7 +53,17 @@ checklist for pulling upstream without breaking our engine.
 
 - Re-run `node scripts/check-fallow-changed-health.mjs --base origin/main` to see
   the new baseline.
-- The orchestrator test-coverage debt (`canvas-render-orchestrator.ts` — extract
-  pure frame-loop planning + real tests; its current `.test.ts` is a mock-echo,
-  not coverage) is scheduled for right after a sync, when upstream churn there
-  has been absorbed.
+- ~~The orchestrator test-coverage debt~~ **Closed 2026-07-27**: the frame loop
+  now lives in `pipelined-frame-loop.ts` (real driver tests replaced the
+  mock-echo), packet-remux eligibility in `packet-remux-plan.ts`, the subtitle
+  mode matrix in `resolveSubtitleExportPlan`, and `shouldRenderItem` in
+  `render-engine-predicates.ts` — all table-tested, pixel parity verified
+  (identical golden-frame md5 before/after). On the next sync, resolve upstream
+  changes to `renderComposition`'s loop by re-diffing `runPipelinedFrameLoop`
+  against upstream's loop body, not by textual merge.
+- Known pre-existing red gate (also red at base 4b2ac2e9, upstream churn):
+  `check:unused-exports` — 6 dead exports from the Motion wave
+  (`TextAnimationSection`, `notifyOnMouseDragIntent`,
+  `getVisiblePlayheadClientX`, duplicate contract re-exports of
+  `getEffectPropertyBaseValue`/`getEdgeScrollDelta`/`getPlayheadEdgeScrollVelocity`)
+  + 3 stale allowlist entries. Needs a per-export trace session (no bulk fix).
