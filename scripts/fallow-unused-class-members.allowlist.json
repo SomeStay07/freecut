@@ -378,11 +378,6 @@
         },
         {
           "parentName": "Clock",
-          "memberName": "setAudioContext",
-          "kind": "class_method"
-        },
-        {
-          "parentName": "Clock",
           "memberName": "setInPoint",
           "kind": "class_method"
         },

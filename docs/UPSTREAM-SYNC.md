@@ -61,9 +61,14 @@ checklist for pulling upstream without breaking our engine.
   (identical golden-frame md5 before/after). On the next sync, resolve upstream
   changes to `renderComposition`'s loop by re-diffing `runPipelinedFrameLoop`
   against upstream's loop body, not by textual merge.
-- Known pre-existing red gate (also red at base 4b2ac2e9, upstream churn):
-  `check:unused-exports` — 6 dead exports from the Motion wave
-  (`TextAnimationSection`, `notifyOnMouseDragIntent`,
-  `getVisiblePlayheadClientX`, duplicate contract re-exports of
-  `getEffectPropertyBaseValue`/`getEdgeScrollDelta`/`getPlayheadEdgeScrollVelocity`)
-  + 3 stale allowlist entries. Needs a per-export trace session (no bulk fix).
+- ~~Known pre-existing red gate~~ **Cleared 2026-07-27** (per-export trace, no
+  bulk fix): deleted the `TextAnimationSection` wrapper (upstream unwired it in
+  bd063cee — the Motion tab uses `AnimationPresetLibrary` now) and the dead
+  `getVisiblePlayheadClientX`; un-exported the internally-used
+  `notifyOnMouseDragIntent`; dropped duplicate contract re-exports
+  (`getEdgeScrollDelta`/`getPlayheadEdgeScrollVelocity` from
+  `keyframes/deps/timeline-contract.ts` — consumers go through
+  `timeline-playhead-contract.ts`; `getEffectPropertyBaseValue` from
+  `editor/deps/timeline-motion-contract.ts`); removed 4 stale allowlist entries
+  (3 unused-exports + `Clock.setAudioContext` in unused-class-members). All
+  ratchet gates green.
