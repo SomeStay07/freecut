@@ -25,7 +25,9 @@ vi.mock('mediabunny', () => {
     }
 
     async computeDuration() {
-      return 10
+      // 'long' sources report a 120 s duration so multi-window fixtures can
+      // exceed the 30 s streaming window without the pool clamping them away.
+      return this.source.url.includes('long') ? 120 : 10
     }
 
     dispose() {
@@ -754,9 +756,133 @@ describe('windowed audio processing', () => {
     }
   })
 
-  it('retains full-segment processing for stateful DSP clips', () => {
-    expect(supportsWindowedAudioProcessing(simpleComposition({ speed: 1.25 }))).toBe(false)
-    expect(supportsWindowedAudioProcessing(simpleComposition({ audioEqHighGainDb: 3 }))).toBe(false)
+  it('accepts stateful DSP clips into the windowed path', () => {
+    expect(supportsWindowedAudioProcessing(simpleComposition({ speed: 1.25 }))).toBe(true)
+    expect(supportsWindowedAudioProcessing(simpleComposition({ audioEqHighGainDb: 3 }))).toBe(true)
+  })
+
+  it('windows a reversed clip identically to full-segment processing', async () => {
+    const composition = simpleComposition({
+      src: 'blob:audio-ramp',
+      isReversed: true,
+      durationInFrames: 1_830,
+      sourceStart: 0,
+      sourceEnd: 1_830,
+      sourceDuration: 1_830,
+    })
+    composition.durationInFrames = 1_830
+
+    clearAudioDecodeCache()
+    const full = await processAudio(composition)
+    expect(full).not.toBeNull()
+
+    clearAudioDecodeCache()
+    const windows = []
+    for await (const window of processAudioWindows(composition)) windows.push(window)
+    expect(windows).toHaveLength(3)
+
+    const stitched = new Float32Array(full!.samples[0]!.length)
+    let offset = 0
+    for (const w of windows) {
+      stitched.set(w.samples[0]!, offset)
+      offset += w.samples[0]!.length
+    }
+    expect(offset).toBe(full!.samples[0]!.length)
+
+    // Probe window interiors and both sides of each 30 s window boundary.
+    for (const i of [0, 24_000, 1_439_999, 1_440_000, 2_000_000, 2_879_999, 2_880_000, 2_927_999]) {
+      expect(stitched[i]!, `sample ${i}`).toBeCloseTo(full!.samples[0]![i]!, 7)
+    }
+    // And the clip is genuinely reversed (descending ramp).
+    expect(stitched[0]!).toBeGreaterThan(stitched[24_000]!)
+  })
+
+  it('mixes streamable and full-segment clips into windows matching the monolith', async () => {
+    const composition: CompositionInputProps = {
+      fps: 30,
+      durationInFrames: 1_830,
+      width: 1920,
+      height: 1080,
+      tracks: [
+        makeTrack({
+          id: 'track-a1',
+          order: 0,
+          kind: 'audio',
+          items: [
+            makeAudioItem({
+              id: 'plain-audio',
+              src: 'blob:audio-long',
+              durationInFrames: 1_830,
+              sourceStart: 0,
+              sourceEnd: 1_830,
+              sourceDuration: 1_830,
+            }),
+          ],
+        }),
+        makeTrack({
+          id: 'track-a2',
+          order: 1,
+          kind: 'audio',
+          items: [
+            makeAudioItem({
+              id: 'dsp-audio',
+              trackId: 'track-a2',
+              src: 'blob:audio-ramp',
+              isReversed: true,
+              from: 300,
+              durationInFrames: 900,
+              sourceStart: 0,
+              sourceEnd: 900,
+              sourceDuration: 900,
+            }),
+          ],
+        }),
+      ],
+      transitions: [],
+      keyframes: [],
+    }
+
+    clearAudioDecodeCache()
+    const full = await processAudio(composition)
+    expect(full).not.toBeNull()
+
+    clearAudioDecodeCache()
+    const windows = []
+    for await (const window of processAudioWindows(composition)) windows.push(window)
+
+    const stitched = new Float32Array(full!.samples[0]!.length)
+    let offset = 0
+    for (const w of windows) {
+      stitched.set(w.samples[0]!, offset)
+      offset += w.samples[0]!.length
+    }
+    expect(offset).toBe(full!.samples[0]!.length)
+
+    // Probe the DSP clip's span (frames 300..1200 → samples 480k..1.92M),
+    // its edges, and the window boundary that falls inside it.
+    for (const i of [
+      0, 479_999, 480_000, 1_000_000, 1_439_999, 1_440_000, 1_919_999, 1_920_000, 2_927_999,
+    ]) {
+      expect(stitched[i]!, `sample ${i}`).toBeCloseTo(full!.samples[0]![i]!, 7)
+    }
+  })
+
+  it('decodes a full-segment DSP clip once across its windows', async () => {
+    const composition = simpleComposition({
+      src: 'blob:audio-ramp',
+      isReversed: true,
+      durationInFrames: 1_830,
+      sourceStart: 0,
+      sourceEnd: 1_830,
+      sourceDuration: 1_830,
+    })
+    composition.durationInFrames = 1_830
+
+    clearAudioDecodeCache()
+    inputConstructor.mockClear()
+    for await (const window of processAudioWindows(composition)) void window
+    expect(inputConstructor).toHaveBeenCalledTimes(1)
+    clearAudioDecodeCache()
   })
 })
 

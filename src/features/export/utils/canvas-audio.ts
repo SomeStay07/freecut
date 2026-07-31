@@ -630,7 +630,12 @@ function resolveCompositionWrapper(
     wrapperSourceEnd:
       compositionItem.sourceEnd ??
       sourceOffset +
-        timelineToSourceFrames(compositionItem.durationInFrames, wrapperSpeed, fps, wrapperSourceFps),
+        timelineToSourceFrames(
+          compositionItem.durationInFrames,
+          wrapperSpeed,
+          fps,
+          wrapperSourceFps,
+        ),
   }
 }
 
@@ -665,9 +670,11 @@ function mapNestedItemWindow(
   if (overlapEnd <= overlapStart) return null
 
   const effectiveStart =
-    compFrom + sourceToTimelineFrames(overlapStart - sourceOffset, wrapperSpeed, wrapperSourceFps, fps)
+    compFrom +
+    sourceToTimelineFrames(overlapStart - sourceOffset, wrapperSpeed, wrapperSourceFps, fps)
   const effectiveEnd =
-    compFrom + sourceToTimelineFrames(overlapEnd - sourceOffset, wrapperSpeed, wrapperSourceFps, fps)
+    compFrom +
+    sourceToTimelineFrames(overlapEnd - sourceOffset, wrapperSpeed, wrapperSourceFps, fps)
   const effectiveDuration = Math.max(1, effectiveEnd - effectiveStart)
 
   const baseSourceStart = subItem.sourceStart ?? subItem.trimStart ?? 0
@@ -2171,15 +2178,16 @@ function supportsWindowedAudioSegment(segment: AudioSegment): boolean {
 }
 
 /**
- * Long, ordinary clips can be mixed in bounded windows. Stateful DSP paths
- * retain the full-segment implementation so speed/pitch/EQ continuity remains
- * identical to preview.
+ * Long, ordinary clips are mixed in bounded windows. Stateful DSP clips
+ * (speed/pitch/EQ/reverse) are still processed whole — per segment, inside the
+ * windowed stream — so their continuity remains identical to preview while
+ * peak memory is bounded by the largest DSP clip instead of the timeline.
  */
 export function supportsWindowedAudioProcessing(composition: CompositionInputProps): boolean {
   const segments = extractAudioSegments(composition, composition.fps).filter(
     (segment) => !segment.muted,
   )
-  return segments.length > 0 && segments.every(supportsWindowedAudioSegment)
+  return segments.length > 0
 }
 
 function hasPacketCopyTimingChanges(segment: AudioSegment, durationInFrames: number): boolean {
@@ -2614,6 +2622,53 @@ function applyAudioWindowMasterGain(mixed: Float32Array[], masterGain: number): 
  * Mix long, non-stateful audio timelines in fixed windows. Every yielded chunk
  * begins exactly where the previous one ended, including silent windows.
  */
+type FullSegmentPlan = { samples: Float32Array[]; startSample: number; endSample: number }
+
+/**
+ * Fold one stateful DSP segment into the current window. The segment is
+ * processed whole — once, lazily, with the same code the monolithic path uses
+ * — cached in `plans`, and sliced per window; `'failed'` mirrors the
+ * monolith's skip-and-continue error handling.
+ */
+async function mixFullSegmentIntoWindow(params: {
+  segment: AudioSegment
+  mixed: Float32Array[]
+  chunkStart: number
+  chunkEnd: number
+  sampleRate: number
+  channels: number
+  fps: number
+  totalFrames: number
+  duckingSources: DuckingSource[]
+  plans: Map<AudioSegment, FullSegmentPlan | 'failed'>
+}): Promise<void> {
+  const { segment, chunkStart, chunkEnd, sampleRate, fps, plans } = params
+  if (Math.floor((segment.startFrame / fps) * sampleRate) >= chunkEnd) return
+
+  let plan = plans.get(segment)
+  if (plan === undefined) {
+    try {
+      const processed = await processFullSegment(segment, fps, sampleRate, params.duckingSources)
+      plan = {
+        samples: processed.samples,
+        startSample: processed.startSample,
+        endSample: processed.startSample + (processed.samples[0]?.length ?? 0),
+      }
+    } catch (error) {
+      log.error(`Failed to process audio segment ${segment.itemId}: ${getErrorMessage(error)}`)
+      plan = 'failed'
+    }
+    plans.set(segment, plan)
+  }
+  if (plan === 'failed' || plan.endSample <= chunkStart) return
+
+  mixAudioSegmentInto(
+    params.mixed,
+    { samples: plan.samples, startSample: plan.startSample - chunkStart },
+    { sampleRate, channels: params.channels, fps, totalFrames: params.totalFrames },
+  )
+}
+
 export async function* processAudioWindows(
   composition: CompositionInputProps,
   signal?: AbortSignal,
@@ -2622,8 +2677,8 @@ export async function* processAudioWindows(
   await resolveSubCompMediaUrls(composition)
 
   const segments = extractAudioSegments(composition, fps).filter((segment) => !segment.muted)
-  if (segments.length === 0 || !segments.every(supportsWindowedAudioSegment)) {
-    throw new Error('Audio timeline requires full-segment processing')
+  if (segments.length === 0) {
+    throw new Error('Audio timeline has no active audio segments')
   }
 
   if (segments.some((segment) => isAc3AudioCodec(segment.audioCodec))) {
@@ -2641,6 +2696,12 @@ export async function* processAudioWindows(
 
   const duckingSources = collectDuckingSources(composition, fps)
 
+  // Stateful DSP segments (speed/pitch/EQ/reverse) cannot be decoded window
+  // by window without breaking DSP continuity, so each one is processed whole
+  // and sliced into windows. Peak memory is bounded by the largest such clip,
+  // not by timeline length.
+  const fullSegmentPlans = new Map<AudioSegment, FullSegmentPlan | 'failed'>()
+
   const decoderPool = await createWindowedAudioDecoderPool()
   try {
     for (let chunkStart = 0; chunkStart < totalSamples; chunkStart += chunkSamples) {
@@ -2651,16 +2712,37 @@ export async function* processAudioWindows(
       const mixed = [new Float32Array(chunkLength), new Float32Array(chunkLength)]
 
       for (const segment of segments) {
-        await mixSegmentIntoAudioWindow({
+        if (supportsWindowedAudioSegment(segment)) {
+          await mixSegmentIntoAudioWindow({
+            segment,
+            mixed,
+            chunkStart,
+            chunkEnd,
+            sampleRate,
+            fps,
+            decoderPool,
+            duckingSources,
+          })
+          continue
+        }
+
+        await mixFullSegmentIntoWindow({
           segment,
           mixed,
           chunkStart,
           chunkEnd,
           sampleRate,
+          channels,
           fps,
-          decoderPool,
+          totalFrames: durationInFrames,
           duckingSources,
+          plans: fullSegmentPlans,
         })
+      }
+
+      // Release full-segment clips once the window stream has passed them.
+      for (const [segment, plan] of fullSegmentPlans) {
+        if (plan !== 'failed' && plan.endSample <= chunkEnd) fullSegmentPlans.delete(segment)
       }
 
       softClipAudioMix(mixed)
@@ -2671,6 +2753,159 @@ export async function* processAudioWindows(
   } finally {
     await decoderPool.dispose()
   }
+}
+
+/**
+ * Run one segment through the complete full-segment DSP chain: range decode,
+ * reverse, speed/pitch, EQ, volume/fades/ducking, and resampling to the
+ * target rate. The monolithic mix and the windowed stream both fold segments
+ * with this exact code, so their output stays sample-identical.
+ */
+async function processFullSegment(
+  segment: AudioSegment,
+  fps: number,
+  targetSampleRate: number,
+  duckingSources: DuckingSource[],
+): Promise<{ samples: Float32Array[]; startSample: number }> {
+  // Calculate the time range we actually need from the source
+  // sourceStartFrame is in source-native FPS frames, so divide by sourceFps (not project fps)
+  const sourceStartTime = segment.sourceStartFrame / segment.sourceFps
+  // Account for speed: at 2x speed, we need twice as much source audio
+  const sourceDurationNeeded = (segment.durationFrames / fps) * segment.speed
+  const sourceEndTime = sourceStartTime + sourceDurationNeeded
+
+  // Decode ONLY the needed range using mediabunny (huge performance improvement!)
+  const decoded = await decodeAudioFromSource(
+    segment.src,
+    segment.itemId,
+    sourceStartTime,
+    sourceEndTime,
+    segment.audioCodec,
+  )
+
+  // Process audio channels.
+  // Note: decoded audio is already trimmed to the range we requested.
+
+  // Apply speed across ALL channels at once to maintain phase coherence
+  // between L/R (the WSOLA pipeline finds shared overlap windows).
+  let processedChannels = decoded.samples
+  if (segment.isReversed) {
+    processedChannels = reverseAudioChannels(processedChannels)
+  }
+  if (
+    Math.abs(segment.speed - 1) > 0.0001 ||
+    isAudioPitchShiftActive(segment.pitchShiftSemitones)
+  ) {
+    processedChannels = await applySpeedAndPitch(
+      processedChannels,
+      segment.speed,
+      segment.pitchShiftSemitones,
+      decoded.sampleRate,
+    )
+  }
+  processedChannels = applyAudioEqStages(
+    processedChannels,
+    decoded.sampleRate,
+    segment.audioEqStages,
+  )
+
+  // Apply per-channel volume, fades, and resampling
+  const fadeInSamples = Math.floor((segment.fadeInFrames / fps) * decoded.sampleRate)
+  const fadeOutSamples = Math.floor((segment.fadeOutFrames / fps) * decoded.sampleRate)
+  const crossfadeFadeInSamples = Math.floor(
+    ((segment.crossfadeFadeInFrames ?? 0) / fps) * decoded.sampleRate,
+  )
+  const crossfadeFadeOutSamples = Math.floor(
+    ((segment.crossfadeFadeOutFrames ?? 0) / fps) * decoded.sampleRate,
+  )
+  const contentStartOffsetSamples = Math.floor(
+    ((segment.contentStartOffsetFrames ?? 0) / fps) * decoded.sampleRate,
+  )
+  const contentEndOffsetSamples = Math.floor(
+    ((segment.contentEndOffsetFrames ?? 0) / fps) * decoded.sampleRate,
+  )
+  const fadeInDelaySamples = Math.floor(
+    ((segment.fadeInDelayFrames ?? 0) / fps) * decoded.sampleRate,
+  )
+  const fadeOutLeadSamples = Math.floor(
+    ((segment.fadeOutLeadFrames ?? 0) / fps) * decoded.sampleRate,
+  )
+
+  for (let c = 0; c < processedChannels.length; c++) {
+    let channelSamples = processedChannels[c]!
+
+    // Apply volume (animated if keyframes exist, static otherwise)
+    if (segment.volumeKeyframes && segment.volumeKeyframes.length > 0) {
+      channelSamples = applyAnimatedVolume(
+        channelSamples,
+        segment.volumeKeyframes,
+        segment.volume,
+        segment.startFrame,
+        segment.itemFrom,
+        fps,
+        decoded.sampleRate,
+      )
+    } else if (segment.volume !== 0) {
+      channelSamples = applyVolume(channelSamples, segment.volume)
+    }
+
+    // Apply fades
+    if (segment.clipFadeSpans && segment.clipFadeSpans.length > 0) {
+      channelSamples = applyClipFadeSpans(
+        channelSamples,
+        segment.clipFadeSpans,
+        decoded.sampleRate,
+        fps,
+      )
+    } else if (fadeInSamples > 0 || fadeOutSamples > 0) {
+      channelSamples = applyFades(
+        channelSamples,
+        fadeInSamples,
+        fadeOutSamples,
+        false,
+        segment.fadeInCurve,
+        segment.fadeOutCurve,
+        segment.fadeInCurveX,
+        segment.fadeOutCurveX,
+        contentStartOffsetSamples,
+        contentEndOffsetSamples,
+        fadeInDelaySamples,
+        fadeOutLeadSamples,
+      )
+    }
+
+    if (crossfadeFadeInSamples > 0 || crossfadeFadeOutSamples > 0) {
+      channelSamples = applyFades(
+        channelSamples,
+        crossfadeFadeInSamples,
+        crossfadeFadeOutSamples,
+        true,
+      )
+    }
+
+    if (duckingSources.length > 0) {
+      channelSamples = applyDucking(
+        channelSamples,
+        duckingSources,
+        segment,
+        segment.startFrame,
+        fps,
+        decoded.sampleRate,
+      )
+    }
+
+    // Resample to target sample rate
+    if (decoded.sampleRate !== targetSampleRate) {
+      channelSamples = await resample(channelSamples, decoded.sampleRate, targetSampleRate)
+    }
+
+    processedChannels[c] = channelSamples
+  }
+
+  // Calculate start position in output
+  const startSample = Math.floor((segment.startFrame / fps) * targetSampleRate)
+
+  return { samples: processedChannels, startSample }
 }
 
 /**
@@ -2738,152 +2973,15 @@ export async function processAudio(
     }
 
     try {
-      // Calculate the time range we actually need from the source
-      // sourceStartFrame is in source-native FPS frames, so divide by sourceFps (not project fps)
-      const sourceStartTime = segment.sourceStartFrame / segment.sourceFps
-      // Account for speed: at 2x speed, we need twice as much source audio
-      const sourceDurationNeeded = (segment.durationFrames / fps) * segment.speed
-      const sourceEndTime = sourceStartTime + sourceDurationNeeded
-
-      // Decode ONLY the needed range using mediabunny (huge performance improvement!)
-      const decoded = await decodeAudioFromSource(
-        segment.src,
-        segment.itemId,
-        sourceStartTime,
-        sourceEndTime,
-        segment.audioCodec,
-      )
-
-      // Process audio channels.
-      // Note: decoded audio is already trimmed to the range we requested.
-
-      // Apply speed across ALL channels at once to maintain phase coherence
-      // between L/R (the WSOLA pipeline finds shared overlap windows).
-      let processedChannels = decoded.samples
-      if (segment.isReversed) {
-        processedChannels = reverseAudioChannels(processedChannels)
-      }
-      if (
-        Math.abs(segment.speed - 1) > 0.0001 ||
-        isAudioPitchShiftActive(segment.pitchShiftSemitones)
-      ) {
-        processedChannels = await applySpeedAndPitch(
-          processedChannels,
-          segment.speed,
-          segment.pitchShiftSemitones,
-          decoded.sampleRate,
-        )
-      }
-      processedChannels = applyAudioEqStages(
-        processedChannels,
-        decoded.sampleRate,
-        segment.audioEqStages,
-      )
-
-      // Apply per-channel volume, fades, and resampling
-      const fadeInSamples = Math.floor((segment.fadeInFrames / fps) * decoded.sampleRate)
-      const fadeOutSamples = Math.floor((segment.fadeOutFrames / fps) * decoded.sampleRate)
-      const crossfadeFadeInSamples = Math.floor(
-        ((segment.crossfadeFadeInFrames ?? 0) / fps) * decoded.sampleRate,
-      )
-      const crossfadeFadeOutSamples = Math.floor(
-        ((segment.crossfadeFadeOutFrames ?? 0) / fps) * decoded.sampleRate,
-      )
-      const contentStartOffsetSamples = Math.floor(
-        ((segment.contentStartOffsetFrames ?? 0) / fps) * decoded.sampleRate,
-      )
-      const contentEndOffsetSamples = Math.floor(
-        ((segment.contentEndOffsetFrames ?? 0) / fps) * decoded.sampleRate,
-      )
-      const fadeInDelaySamples = Math.floor(
-        ((segment.fadeInDelayFrames ?? 0) / fps) * decoded.sampleRate,
-      )
-      const fadeOutLeadSamples = Math.floor(
-        ((segment.fadeOutLeadFrames ?? 0) / fps) * decoded.sampleRate,
-      )
-
-      for (let c = 0; c < processedChannels.length; c++) {
-        let channelSamples = processedChannels[c]!
-
-        // Apply volume (animated if keyframes exist, static otherwise)
-        if (segment.volumeKeyframes && segment.volumeKeyframes.length > 0) {
-          channelSamples = applyAnimatedVolume(
-            channelSamples,
-            segment.volumeKeyframes,
-            segment.volume,
-            segment.startFrame,
-            segment.itemFrom,
-            fps,
-            decoded.sampleRate,
-          )
-        } else if (segment.volume !== 0) {
-          channelSamples = applyVolume(channelSamples, segment.volume)
-        }
-
-        // Apply fades
-        if (segment.clipFadeSpans && segment.clipFadeSpans.length > 0) {
-          channelSamples = applyClipFadeSpans(
-            channelSamples,
-            segment.clipFadeSpans,
-            decoded.sampleRate,
-            fps,
-          )
-        } else if (fadeInSamples > 0 || fadeOutSamples > 0) {
-          channelSamples = applyFades(
-            channelSamples,
-            fadeInSamples,
-            fadeOutSamples,
-            false,
-            segment.fadeInCurve,
-            segment.fadeOutCurve,
-            segment.fadeInCurveX,
-            segment.fadeOutCurveX,
-            contentStartOffsetSamples,
-            contentEndOffsetSamples,
-            fadeInDelaySamples,
-            fadeOutLeadSamples,
-          )
-        }
-
-        if (crossfadeFadeInSamples > 0 || crossfadeFadeOutSamples > 0) {
-          channelSamples = applyFades(
-            channelSamples,
-            crossfadeFadeInSamples,
-            crossfadeFadeOutSamples,
-            true,
-          )
-        }
-
-        if (duckingSources.length > 0) {
-          channelSamples = applyDucking(
-            channelSamples,
-            duckingSources,
-            segment,
-            segment.startFrame,
-            fps,
-            decoded.sampleRate,
-          )
-        }
-
-        // Resample to target sample rate
-        if (decoded.sampleRate !== config.sampleRate) {
-          channelSamples = await resample(channelSamples, decoded.sampleRate, config.sampleRate)
-        }
-
-        processedChannels[c] = channelSamples
-      }
-
-      // Calculate start position in output
-      const startSample = Math.floor((segment.startFrame / fps) * config.sampleRate)
-
-      mixAudioSegmentInto(mixedSamples, { samples: processedChannels, startSample }, config)
+      const processed = await processFullSegment(segment, fps, config.sampleRate, duckingSources)
+      mixAudioSegmentInto(mixedSamples, processed, config)
       processedSegmentCount++
 
       log.debug('Processed audio segment', {
         itemId: segment.itemId,
         type: segment.type,
-        startSample,
-        outputSamples: processedChannels[0]?.length,
+        startSample: processed.startSample,
+        outputSamples: processed.samples[0]?.length,
       })
     } catch (error) {
       log.error(`Failed to process audio segment ${segment.itemId}: ${getErrorMessage(error)}`)
