@@ -44,6 +44,41 @@ function compareTrees(label, sourceTree, targetTree) {
   return missing.length
 }
 
+function jsonFiles(dir) {
+  return fs.readdirSync(dir).filter((file) => file.endsWith('.json')).sort()
+}
+
+function comparePartialDirectories(partialsDir, source, target) {
+  const sourceDir = path.join(partialsDir, source)
+  const targetDir = path.join(partialsDir, target)
+  let missing = 0
+
+  for (const file of jsonFiles(sourceDir)) {
+    const targetFile = path.join(targetDir, file)
+    const targetTree = fs.existsSync(targetFile) ? readJson(targetFile) : {}
+    missing += compareTrees(
+      `partial ${file} ${target}`,
+      readJson(path.join(sourceDir, file)),
+      targetTree,
+    )
+  }
+
+  return missing
+}
+
+function compareFlatPartials(partialsDir, source, target) {
+  let missing = 0
+  for (const file of jsonFiles(partialsDir)) {
+    const json = readJson(path.join(partialsDir, file))
+    missing += compareTrees(
+      `partial ${file} ${target}`,
+      json[source] ?? {},
+      json[target] ?? {},
+    )
+  }
+  return missing
+}
+
 let failures = 0
 const sourceBase = path.join(options.locales, `${options.source}.json`)
 const targetBase = path.join(options.locales, `${options.target}.json`)
@@ -55,14 +90,11 @@ failures += compareTrees(
 )
 
 if (options.partials && fs.existsSync(options.partials)) {
-  const files = fs.readdirSync(options.partials).filter((file) => file.endsWith('.json')).sort()
-  for (const file of files) {
-    const json = readJson(path.join(options.partials, file))
-    failures += compareTrees(
-      `${file} ${options.target}`,
-      json[options.source] ?? {},
-      json[options.target] ?? {},
-    )
+  const sourcePartialDir = path.join(options.partials, options.source)
+  if (fs.existsSync(sourcePartialDir) && fs.statSync(sourcePartialDir).isDirectory()) {
+    failures += comparePartialDirectories(options.partials, options.source, options.target)
+  } else {
+    failures += compareFlatPartials(options.partials, options.source, options.target)
   }
 }
 

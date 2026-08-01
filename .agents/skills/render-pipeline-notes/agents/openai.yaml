@@ -1,0 +1,4 @@
+interface:
+  display_name: "FreeCut Render Pipeline"
+  short_description: "Apply FreeCut render-loop and GPU pipeline invariants"
+  default_prompt: "Use $render-pipeline-notes before changing FreeCut render or playback internals."

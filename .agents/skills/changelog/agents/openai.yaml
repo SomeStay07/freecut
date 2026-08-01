@@ -1,0 +1,4 @@
+interface:
+  display_name: "FreeCut Changelog"
+  short_description: "Maintain FreeCut weekly changelog files in sync"
+  default_prompt: "Use $changelog to update the FreeCut user-facing changelog."

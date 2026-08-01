@@ -1,0 +1,4 @@
+interface:
+  display_name: "FreeCut Toolchain Notes"
+  short_description: "Apply FreeCut dependency and build-toolchain invariants"
+  default_prompt: "Use $toolchain-notes before changing FreeCut dependencies or tooling."

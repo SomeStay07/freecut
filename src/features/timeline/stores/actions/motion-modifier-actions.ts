@@ -6,11 +6,7 @@
  * existing modifier of the same type on that item (apply == set, not stack).
  */
 
-import type {
-  MotionAnimationLayer,
-  MotionModifier,
-  MotionModifierType,
-} from '@/types/motion'
+import type { MotionAnimationLayer, MotionModifier, MotionModifierType } from '@/types/motion'
 import type { AnimatableProperty } from '@/types/keyframe'
 import type { TimelineItem } from '@/types/timeline'
 import { useItemsStore } from '../items-store'
@@ -23,7 +19,7 @@ import { execute, canAddKeyframeAtFrame } from './shared'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 
 // Function declaration (not a module-scope const) to avoid temporal dead zone
-// errors in production chunk ordering — see CLAUDE.md gotchas / shared.ts.
+// errors in production chunk ordering; see shared.ts for the lazy-init contract.
 function getLog() {
   return createLogger('MotionModifierActions')
 }

@@ -26,7 +26,7 @@
     "report:feature-edges:json": "node scripts/report-feature-edges.mjs --json",
     "check": "vp check --no-fmt src headless vite.config.ts",
     "check:fix": "vp check src headless vite.config.ts package.json .oxlintrc.json .oxfmtrc.json --fix",
-    "verify": "vp run check && vp run check:boundaries && vp run check:deps-contracts && vp run check:legacy-lib-imports && vp run check:deps-wrapper-health && vp run check:unused-exports && vp run check:unused-class-members && vp run check:changed-health && vp run check:edge-budgets && vp test run && vp build && npm run headless:test:portable",
+    "verify": "vp run check:codex-contract && vp run check && vp run check:boundaries && vp run check:deps-contracts && vp run check:legacy-lib-imports && vp run check:deps-wrapper-health && vp run check:unused-exports && vp run check:unused-class-members && vp run check:changed-health && vp run check:edge-budgets && vp test run && vp build && npm run headless:test:portable",
     "preview": "vp preview",
     "preview:perf": "vp preview --host --strictPort --port 4173",
     "perf": "vp run build:perf && vp run preview:perf",
@@ -50,7 +50,8 @@
     "headless:gpu:probe": "node headless/probe.mjs",
     "changelog:append": "node scripts/changelog-append.mjs",
     "changelog:rollup": "node scripts/changelog-rollup.mjs",
-    "prepare": "vp config"
+    "prepare": "vp config",
+    "check:codex-contract": "node scripts/check-codex-project-contract.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "5.2.2",

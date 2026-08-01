@@ -175,7 +175,7 @@ function generateConfigsFromRegistry(): PresentationConfig[] {
 }
 
 // Lazy-initialized caches — avoids TDZ when bundler orders this module
-// before the transition registry is populated (see CLAUDE.md gotchas).
+// before the transition registry is populated; keep this lazy to avoid a production bundle TDZ.
 let _presentationConfigs: PresentationConfig[] | null = null
 let _configsByCategory: Record<string, PresentationConfig[]> | null = null
 let _categoryStartIndices: Record<string, number> | null = null

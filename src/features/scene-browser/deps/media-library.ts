@@ -1,7 +1,7 @@
 /**
  * Cross-feature adapter — scene-browser accesses media-library state and
  * the shared source player through this barrel so the import graph stays
- * one-directional (feature-boundary rule in CLAUDE.md).
+ * one-directional (feature-boundary rule in AGENTS.md).
  */
 
 export * from './media-library-contract'

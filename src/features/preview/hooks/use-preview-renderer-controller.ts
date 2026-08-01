@@ -727,8 +727,8 @@ export function usePreviewRendererController({
   // Captures share the offscreen canvas (and renderer) with the render pump.
   // Sampling the canvas mid-render flashes half-composited frames into the
   // scopes, and a second concurrent renderFrame call interleaves with the
-  // pump's (single-mutex invariant — see render-loop concurrency notes in
-  // CLAUDE.md). This helper briefly waits for the pump to go idle, runs `fn`
+  // pump's single-mutex invariant (see the render-pipeline-notes skill). This
+  // helper briefly waits for the pump to go idle, runs `fn`
   // while holding the pump's mutex through completion; on timeout it returns
   // null rather than racing the visible render path.
   const withScrubRenderLock = useCallback(

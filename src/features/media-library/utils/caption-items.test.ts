@@ -881,12 +881,7 @@ describe('caption-items', () => {
       items: [attachedText, attachedSubtitle, title],
     }
 
-    const tracks = appendVirtualTranscriptCaptionTrack(
-      [videoTrack, captionTrack],
-      30,
-      1920,
-      1080,
-    )
+    const tracks = appendVirtualTranscriptCaptionTrack([videoTrack, captionTrack], 30, 1920, 1080)
 
     expect(tracks).toHaveLength(2)
     expect(tracks.find((track) => track.id === 'track-captions')?.items).toEqual([title])
@@ -1007,7 +1002,7 @@ describe('buildCaptionTrackAbove', () => {
     const sorted = [...tracks, captionTrack].sort((x, y) => x.order - y.order)
     const clipIndex = sorted.findIndex((t) => t.id === 'clip')
     const captionIndex = sorted.findIndex((t) => t.id === captionTrack.id)
-    // CLAUDE.md convention: lower order = visually higher (top of timeline).
+    // Timeline convention: lower order = visually higher (top of timeline).
     expect(captionIndex).toBeLessThan(clipIndex)
   })
 

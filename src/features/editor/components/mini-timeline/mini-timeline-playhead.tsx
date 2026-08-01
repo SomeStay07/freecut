@@ -7,7 +7,7 @@ import { getMiniTimelineDisplayFrame } from './utils'
 /**
  * Self-tracking playhead overlay. Subscribes to the playback store and moves
  * itself via a transform so per-frame scrub updates never re-render the host
- * strip (see CLAUDE.md render gotchas). Pass `suppressPreviewRef` to pin the
+ * strip without React rerenders. Pass `suppressPreviewRef` to pin the
  * playhead at the committed frame during an IO drag while the preview canvas
  * keeps updating.
  */

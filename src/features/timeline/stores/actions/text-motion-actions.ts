@@ -26,7 +26,7 @@ import { execute } from './shared'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 
 // Function declaration (not a module-scope const) to avoid temporal dead zone
-// errors in production chunk ordering — see CLAUDE.md gotchas / shared.ts.
+// errors in production chunk ordering; see shared.ts for the lazy-init contract.
 function getLog() {
   return createLogger('TextMotionActions')
 }

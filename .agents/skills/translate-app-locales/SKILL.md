@@ -12,7 +12,7 @@ Use this skill for end-to-end language work, not just a single JSON file.
 1. Locate the i18n entrypoint, supported language registry, base locale files, and partial namespace files.
 2. Add the language to the registry and import/load it wherever base locales are wired.
 3. Create the base locale JSON for the language.
-4. Translate every partial namespace that has English keys, including catch-all or "missing" files.
+4. Translate every partial namespace present under the English language directory.
 5. Preserve the English key tree exactly for the target language.
 6. Preserve interpolation tokens, ICU/plural suffixes, HTML tags, component placeholders, URLs, command names, and code identifiers.
 7. Remove obsolete UI settings only when the user asked for product behavior changes, not as part of translation by default.
@@ -25,7 +25,7 @@ For FreeCut-like repos, check all of these:
 - `src/i18n/languages.ts`: `SUPPORTED_LANGUAGES`, direction, native name, English name.
 - `src/i18n/index.ts`: base locale imports and `baseLocales`.
 - `src/i18n/locales/<lang>.json`: base app shell/settings/common language strings.
-- `src/i18n/locales/partials/*.json`: every namespace partial. Do not skip `missing.json`; it may contain active export/media/preview/timeline UI.
+- `src/i18n/locales/partials/<lang>/*.json`: every namespace partial for that language. Use the English directory as the authoritative namespace list; do not invent or omit files.
 - Existing locale files: remove keys only when the source UI no longer uses them.
 
 If the repo has a different structure, adapt the same rule: target language must cover every English leaf key that can be loaded by i18next or the app's locale loader.
@@ -46,7 +46,7 @@ If the repo has a different structure, adapt the same rule: target language must
 Use the bundled script after editing locale files:
 
 ```bash
-node <skill>/scripts/check-locale-coverage.mjs --locales src/i18n/locales --partials src/i18n/locales/partials --source en --target tr
+node .agents/skills/translate-app-locales/scripts/check-locale-coverage.mjs --locales src/i18n/locales --partials src/i18n/locales/partials --source en --target tr
 ```
 
 The script verifies:

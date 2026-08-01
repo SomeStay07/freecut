@@ -19,7 +19,7 @@ import { repairTransitions } from '../../utils/transition-auto-repair'
 import { isFrameInTransitionRegion } from '@/features/timeline/deps/keyframes'
 
 // Use function declarations (not const) to avoid temporal dead zone errors
-// in production chunk ordering — see CLAUDE.md gotchas.
+// in production chunk ordering; keep this function declaration lazy-safe.
 export function getLogger() {
   return createLogger('TimelineActions')
 }
