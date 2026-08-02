@@ -127,10 +127,7 @@ const easing = z.enum([
 const easingConfigSchema = z
   .object({
     type: easing,
-    bezier: z
-      .object({ x1: finite, y1: finite, x2: finite, y2: finite })
-      .strict()
-      .optional(),
+    bezier: z.object({ x1: finite, y1: finite, x2: finite, y2: finite }).strict().optional(),
     spring: z
       .object({
         tension: z.number().min(0).max(500),
@@ -550,6 +547,35 @@ export const mediaProbeRequestSchema = z
     path: ['expectedRevision'],
   })
 
+const workspaceRelativeMediaPathSchema = z
+  .string()
+  .min(1)
+  .max(1024)
+  .superRefine((value, ctx) => {
+    const invalid =
+      value.includes('\0') ||
+      value.includes('\\') ||
+      value.startsWith('/') ||
+      /^[A-Za-z]:/.test(value) ||
+      value.startsWith('//') ||
+      value.split('/').some((part) => part === '' || part === '.' || part === '..')
+    if (invalid) ctx.addIssue({ code: 'custom', message: 'must be a safe workspace-relative path' })
+  })
+
+export const mediaImportRequestSchema = z
+  .object({
+    mediaId: portableIdSchema,
+    sourceRelativePath: workspaceRelativeMediaPathSchema,
+    expectedByteSize: z
+      .number()
+      .int()
+      .positive()
+      .max(20 * 1024 ** 3),
+    expectedSha256: revisionSchema,
+    projectId: portableIdSchema.optional(),
+  })
+  .strict()
+
 const RENDER_OPTIONS = {
   codecs: ['h264', 'h265', 'vp9', 'vp8', 'av1'],
   containers: ['mp4', 'webm', 'mov', 'mkv', 'mp3', 'wav', 'm4a'],
@@ -675,6 +701,7 @@ export function capabilities() {
       projectUpdate: z.toJSONSchema(projectUpdateRequestSchema, { target: 'draft-7' }),
       lifecycleEdit: z.toJSONSchema(lifecycleEditRequestSchema, { target: 'draft-7' }),
       mediaProbe: z.toJSONSchema(mediaProbeRequestSchema, { target: 'draft-7' }),
+      mediaImport: z.toJSONSchema(mediaImportRequestSchema, { target: 'draft-7' }),
     },
     lifecycle: {
       routes: [
@@ -686,11 +713,13 @@ export function capabilities() {
         'PATCH /v1/projects/:id',
         'POST /v1/projects/:id/edit',
         'GET /v1/media',
+        'POST /v1/media/import',
         'GET /v1/media/:id',
         'POST /v1/media/:id/probe',
         'POST /v1/render',
       ],
       httpMediaUpload: false,
+      workspaceMediaImport: true,
       deleteProject: false,
       writerMode: 'exclusive',
       limits: {
