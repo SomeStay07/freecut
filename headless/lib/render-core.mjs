@@ -124,8 +124,10 @@ async function ensureHarnessReachable(url) {
  * edit path (no rendering): no media server is started and `mediaUrlOf` is a
  * no-op.
  */
-export async function startHarness({ workspace, devUrl, build }) {
-  const resolveMedia = workspace ? (mediaId) => resolveMediaFile(workspace, mediaId) : undefined
+export async function startHarness({ workspace, devUrl, build, resolveAdditionalMedia }) {
+  const resolveMedia = workspace
+    ? (mediaId) => resolveAdditionalMedia?.(mediaId) ?? resolveMediaFile(workspace, mediaId)
+    : undefined
   if (devUrl) {
     await ensureHarnessReachable(devUrl)
     if (!resolveMedia)
