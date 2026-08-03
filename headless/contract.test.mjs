@@ -87,6 +87,10 @@ test('every published edit discriminator has a valid strict schema', () => {
     false,
   )
   assert.equal(editOpSchema.safeParse({ op: 'updateItem', id: 'i', updates: {} }).success, false)
+  for (const op of ['removeItems', 'split', 'trimStart', 'trimEnd']) {
+    assert.equal(editOpSchema.safeParse({ ...samples[op], linked: false }).success, true, op)
+    assert.equal(editOpSchema.safeParse({ ...samples[op], linked: 'false' }).success, false, op)
+  }
   assert.equal(
     editOpSchema.safeParse({ op: 'setTransform', id: 'i', transform: {} }).success,
     false,
