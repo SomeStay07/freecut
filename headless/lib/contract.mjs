@@ -679,6 +679,7 @@ export function capabilities() {
     lifecycle: {
       routes: [
         'GET /v1/capabilities',
+        'GET /v1/status',
         'POST /v1/projects',
         'GET /v1/projects',
         'GET /v1/projects/:id',
@@ -693,6 +694,11 @@ export function capabilities() {
       httpMediaUpload: false,
       deleteProject: false,
       writerMode: 'exclusive',
+      status: {
+        transport: 'poll',
+        route: 'GET /v1/status',
+        renderProgress: true,
+      },
       limits: {
         projectJsonBytes: 16 * 1024 * 1024,
         mediaMetadataBytes: 2 * 1024 * 1024,

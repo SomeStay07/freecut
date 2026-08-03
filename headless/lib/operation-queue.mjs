@@ -40,6 +40,16 @@ export class OperationQueue {
   get accepting() {
     return this.#accepting
   }
+
+  get status() {
+    return {
+      accepting: this.#accepting,
+      active: this.#active,
+      waiting: this.#waiting,
+      maxQueueDepth: this.maxQueueDepth,
+    }
+  }
+
   enqueue(run, { timeoutMs, kind = 'browser' }) {
     if (!this.#accepting) {
       throw new OperationQueueError('SERVICE_SHUTTING_DOWN', 'Service is shutting down', 503)

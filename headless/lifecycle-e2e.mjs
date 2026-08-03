@@ -62,6 +62,8 @@ service.stderr.on('data', (chunk) => {
   serviceLog += chunk
 })
 
+let initialStatus
+let edited
 try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -73,6 +75,10 @@ try {
     }
   }
   assert.equal(ready, true, serviceLog)
+  initialStatus = (await jsonRequest('/v1/status')).body
+  assert.equal(initialStatus.state, 'ready')
+  assert.equal(initialStatus.queue.accepting, true)
+  assert.equal(initialStatus.activeOperation, null)
   const createOptions = {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'idempotency-key': 'create-demo' },
@@ -102,9 +108,71 @@ try {
       ],
     }),
   }
-  const edited = (await jsonRequest('/v1/projects/demo/edit', editOptions)).body
+  edited = (await jsonRequest('/v1/projects/demo/edit', editOptions)).body
   assert.equal(edited.persisted, true)
   assert.equal(edited.project.timeline.items[0].from, 6)
+  const staleUpdate = await fetch(`http://127.0.0.1:${port}/v1/projects/demo`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      updates: { name: 'Stale update' },
+      expectedRevision: created.revision,
+    }),
+  })
+  assert.equal(staleUpdate.status, 409)
+  const staleError = await staleUpdate.json()
+  assert.equal(staleError.error.code, 'REVISION_CONFLICT')
+  assert.equal(staleError.error.expectedRevision, created.revision)
+  assert.equal(staleError.error.actualRevision, edited.revision)
+  const conflictStatus = (await jsonRequest('/v1/status')).body
+  assert.equal(conflictStatus.lastOperation.kind, 'project-update')
+  assert.equal(conflictStatus.lastOperation.state, 'failed')
+  assert.equal(conflictStatus.lastOperation.error.code, 'REVISION_CONFLICT')
+  const unchanged = (await jsonRequest('/v1/projects/demo')).body
+  assert.equal(unchanged.revision, edited.revision)
+  assert.equal(unchanged.project.name, 'Demo')
+
+  const traversal = await fetch(`http://127.0.0.1:${port}/v1/projects/%2e%2e%2foutside`)
+  assert.equal(traversal.status, 404)
+
+  const renderedRequest = fetch(`http://127.0.0.1:${port}/v1/render`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ project: 'demo', duration: 1, codec: 'vp9' }),
+  })
+  let observedOperation
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const currentStatus = (await jsonRequest('/v1/status')).body
+    if (
+      currentStatus.activeOperation?.kind === 'render' &&
+      currentStatus.activeOperation.progress
+    ) {
+      observedOperation = currentStatus.activeOperation
+      assert.equal(currentStatus.state, 'ready')
+      assert.equal(currentStatus.queue.active, 1)
+      assert.equal(typeof observedOperation.progress.phase, 'string')
+      assert.ok(observedOperation.progress.progress >= 0)
+      assert.ok(observedOperation.progress.progress <= 100)
+      if (
+        observedOperation.progress.currentFrame !== undefined &&
+        observedOperation.progress.totalFrames !== undefined
+      ) {
+        assert.ok(observedOperation.progress.currentFrame <= observedOperation.progress.totalFrames)
+      }
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  const renderedResponse = await renderedRequest
+  assert.equal(renderedResponse.status, 200)
+  assert.match(renderedResponse.headers.get('content-type') ?? '', /^video\/webm(?:;|$)/)
+  assert.ok((await renderedResponse.arrayBuffer()).byteLength > 0)
+  assert.ok(observedOperation, 'render progress was never observable through /v1/status')
+  const completedStatus = (await jsonRequest('/v1/status')).body
+  assert.equal(completedStatus.activeOperation, null)
+  assert.equal(completedStatus.lastOperation.kind, 'render')
+  assert.equal(completedStatus.lastOperation.state, 'succeeded')
+  assert.equal(completedStatus.lastOperation.id, observedOperation.id)
 } finally {
   const exited = new Promise((resolve) => service.once('exit', () => resolve(true)))
   service.kill('SIGTERM')
@@ -115,7 +183,54 @@ try {
   assert.equal(didExit, true, 'service did not exit after SIGTERM')
   // Windows TerminateProcess does not run Node exit hooks. The test owns this
   // workspace and has confirmed the writer PID exited, so its lock is stale.
-  fs.rmSync(path.join(workspace, '.freecut-headless', 'writer.lock'), { force: true })
+  const lockPath = path.join(workspace, '.freecut-headless', 'writer.lock')
+  if (process.platform === 'win32') fs.rmSync(lockPath, { force: true })
+  else assert.equal(fs.existsSync(lockPath), false, 'writer lock survived graceful shutdown')
+}
+
+const restartPort = port + 1
+const restartedService = spawn(
+  process.execPath,
+  ['headless/serve.mjs', '--workspace', workspace, '--port', String(restartPort)],
+  { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+)
+let restartLog = ''
+restartedService.stdout.on('data', (chunk) => {
+  restartLog += chunk
+})
+restartedService.stderr.on('data', (chunk) => {
+  restartLog += chunk
+})
+try {
+  let restartedStatus
+  for (let attempt = 0; attempt < 80; attempt++) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${restartPort}/v1/status`)
+      if (response.ok) {
+        restartedStatus = await response.json()
+        break
+      }
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  assert.equal(restartedStatus?.state, 'ready', restartLog)
+  assert.equal(restartedStatus.lastOperation, null)
+  assert.notEqual(restartedStatus.instanceId, initialStatus.instanceId)
+  const restartedProjectResponse = await fetch(`http://127.0.0.1:${restartPort}/v1/projects/demo`)
+  assert.equal(restartedProjectResponse.status, 200)
+  const restartedProject = await restartedProjectResponse.json()
+  assert.equal(restartedProject.revision, edited.revision)
+  assert.equal(restartedProject.project.timeline.items[0].from, 6)
+} finally {
+  const exited = new Promise((resolve) => restartedService.once('exit', () => resolve(true)))
+  restartedService.kill('SIGTERM')
+  const didExit = await Promise.race([
+    exited,
+    new Promise((resolve) => setTimeout(() => resolve(false), 10_000)),
+  ])
+  assert.equal(didExit, true, 'restarted service did not exit after SIGTERM')
+  if (process.platform === 'win32')
+    fs.rmSync(path.join(workspace, '.freecut-headless', 'writer.lock'), { force: true })
 }
 
 try {

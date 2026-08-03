@@ -48,6 +48,12 @@ test('normal operation completes without recovery', async () => {
   })
   assert.equal(await queue.enqueue(async () => 42, { timeoutMs: 100, kind: 'edit' }), 42)
   assert.equal(recoveries, 0)
+  assert.deepEqual(queue.status, {
+    accepting: true,
+    active: 0,
+    waiting: 0,
+    maxQueueDepth: 1,
+  })
 })
 
 test('never-resolving evaluation times out and recreates the page', async () => {
@@ -122,6 +128,26 @@ test('page crash is recovered before the next operation uses a fresh page', asyn
   )
 })
 
+test('page session forwards harness render progress to the service observer', async () => {
+  let binding
+  const browser = fakeBrowser(() => ({
+    async exposeBinding(name, callback) {
+      assert.equal(name, '__freecutProgress')
+      binding = callback
+    },
+  }))
+  const progress = []
+  const session = new PageSession({
+    browser,
+    harnessUrl: 'http://harness',
+    onProgress: (value) => progress.push(value),
+  })
+  await session.open()
+  await binding({}, { phase: 'encode', progress: 25 })
+  assert.deepEqual(progress, [{ phase: 'encode', progress: 25 }])
+  await session.close()
+})
+
 test('queue rejects work beyond the configured waiting depth', async () => {
   let release
   const blocked = new Promise((resolve) => {
@@ -130,6 +156,13 @@ test('queue rejects work beyond the configured waiting depth', async () => {
   const queue = new OperationQueue({ maxQueueDepth: 1, recover: async () => {} })
   const first = queue.enqueue(() => blocked, { timeoutMs: 500, kind: 'edit' })
   const second = queue.enqueue(async () => 2, { timeoutMs: 500, kind: 'edit' })
+  await Promise.resolve()
+  assert.deepEqual(queue.status, {
+    accepting: true,
+    active: 1,
+    waiting: 1,
+    maxQueueDepth: 1,
+  })
   assert.throws(
     () => queue.enqueue(async () => 3, { timeoutMs: 500, kind: 'edit' }),
     (error) => error.code === 'QUEUE_FULL' && error.statusCode === 429,
@@ -153,6 +186,7 @@ test('shutdown drains idle and active queues and rejects new work', async () => 
   const active = new OperationQueue({ maxQueueDepth: 1, recover: async () => {} })
   const operation = active.enqueue(() => blocked, { timeoutMs: 500, kind: 'render' })
   const draining = active.shutdown(200)
+  assert.equal(active.status.accepting, false)
   release('done')
   assert.equal(await operation, 'done')
   await draining

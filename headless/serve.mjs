@@ -85,6 +85,7 @@ import {
   updateMediaMetadata,
 } from './lib/lifecycle-store.mjs'
 import { withIdempotency } from './lib/idempotency.mjs'
+import { ServiceStatus } from './lib/service-status.mjs'
 
 const HELP = `Usage: node headless/serve.mjs --workspace <dir> [options]\n\nOptions:\n  --host <address>           Bind address (default: 127.0.0.1)\n  --port <n>                 HTTP port (default: 8787)\n  --render-timeout-ms <n>    Whole render deadline (default: 1800000)\n  --edit-timeout-ms <n>      Whole edit deadline (default: 120000)\n  --max-queue-depth <n>      Waiting operations allowed behind the active one (default: 8)\n  --shutdown-timeout-ms <n>  Graceful queue drain deadline (default: 30000)\n  --build  --head  --harness-url <url>\n`
 const SERVE_OPTIONS = new Set([
@@ -185,10 +186,12 @@ async function main() {
     headless: !args.head,
     args: chromeLaunchArgs(),
   })
+  const serviceStatus = new ServiceStatus()
   const session = new PageSession({
     browser,
     harnessUrl,
     onPageError: (e) => console.error('[pageerror]', e.message),
+    onProgress: (progress) => serviceStatus.reportProgress(progress),
   })
   await session.open()
 
@@ -219,6 +222,7 @@ async function main() {
       gpu = await probeGpu(session.page)
     },
   })
+  serviceStatus.ready()
 
   const tmpDir = path.join(os.tmpdir(), 'freecut-serve')
   fs.mkdirSync(tmpDir, { recursive: true })
@@ -560,6 +564,14 @@ async function main() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
     const route = `${req.method} ${url.pathname}`
+    if (route === 'GET /v1/status') {
+      sendJson(res, 200, {
+        ok: true,
+        apiVersion: HEADLESS_API_VERSION,
+        ...serviceStatus.snapshot(queue.status),
+      })
+      return
+    }
     const projectMatch = /^\/v1\/projects\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})$/.exec(url.pathname)
     const projectEditMatch = /^\/v1\/projects\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/edit$/.exec(
       url.pathname,
@@ -663,7 +675,28 @@ async function main() {
       sendJson(res, 404, { error: `No route: ${route}` })
       return
     }
-    handler().catch((e) => {
+    const operationKind =
+      route === 'POST /v1/projects'
+        ? 'project-create'
+        : projectEditMatch && req.method === 'POST'
+          ? 'project-edit'
+          : projectMatch && req.method === 'PUT'
+            ? 'project-save'
+            : projectMatch && req.method === 'PATCH'
+              ? 'project-update'
+              : mediaProbeMatch && req.method === 'POST'
+                ? 'media-probe'
+                : route === 'POST /v1/render' || route === 'POST /render'
+                  ? 'render'
+                  : route === 'POST /edit'
+                    ? 'edit'
+                    : route === 'POST /frame'
+                      ? 'frame'
+                      : route === 'POST /layout'
+                        ? 'layout'
+                        : null
+    const operation = operationKind ? () => serviceStatus.track(operationKind, handler) : handler
+    operation().catch((e) => {
       console.error(`${route} failed:`, e.message ?? e)
       if (!res.headersSent) {
         const validation = e instanceof ContractValidationError
@@ -713,6 +746,7 @@ async function main() {
   const shutdown = () =>
     (shuttingDown ??= (async () => {
       console.log('\nShutting down...')
+      serviceStatus.draining()
       const serverClosed = new Promise((resolve) => server.close(resolve))
       try {
         await queue.shutdown(shutdownTimeoutMs)
@@ -732,6 +766,7 @@ async function main() {
         ])
         clearTimeout(closeTimer)
         if (!closed) server.closeAllConnections?.()
+        serviceStatus.stopped()
       }
     })())
   process.on('SIGINT', shutdown)

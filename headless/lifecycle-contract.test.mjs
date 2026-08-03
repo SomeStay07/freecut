@@ -87,4 +87,10 @@ test('capabilities publish lifecycle constraints', () => {
   assert.equal(result.lifecycle.deleteProject, false)
   assert.equal(result.lifecycle.writerMode, 'exclusive')
   assert.ok(result.lifecycle.routes.includes('POST /v1/projects/:id/edit'))
+  assert.ok(result.lifecycle.routes.includes('GET /v1/status'))
+  assert.deepEqual(result.lifecycle.status, {
+    transport: 'poll',
+    route: 'GET /v1/status',
+    renderProgress: true,
+  })
 })
