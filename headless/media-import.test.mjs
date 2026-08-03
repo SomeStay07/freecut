@@ -143,6 +143,9 @@ test('imports, probes, promotes atomically, associates a real project, and retur
   assert.equal(JSON.stringify(result.response).includes(root), false)
   const media = await getMediaResource(root, body.mediaId)
   assert.equal(media.metadata.sourceSha256, sha256(bytes))
+  assert.equal(media.metadata.audioCodec, 'aac')
+  assert.equal(media.metadata.audioCodecSupported, true)
+  assert.equal(media.metadata.videoCodecSupported, true)
   assert.deepEqual(media.projectIds, [project.id])
   assert.deepEqual(fs.readFileSync(path.join(root, 'media', body.mediaId, 'ролик.mp4')), bytes)
   assert.equal(

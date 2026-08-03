@@ -359,6 +359,17 @@ export async function importWorkspaceMedia(
         fps: details.type === 'video' ? (details.fps ?? 0) : 0,
         codec: details.codec ?? 'unknown',
         bitrate: details.bitrate ?? 0,
+        ...('audioCodec' in details ? { audioCodec: details.audioCodec } : {}),
+        ...('audioCodecSupported' in details
+          ? { audioCodecSupported: details.audioCodecSupported }
+          : {}),
+        ...('videoCodecSupported' in details
+          ? { videoCodecSupported: details.videoCodecSupported }
+          : {}),
+        ...('keyframeTimestamps' in details
+          ? { keyframeTimestamps: details.keyframeTimestamps }
+          : {}),
+        ...('gopInterval' in details ? { gopInterval: details.gopInterval } : {}),
         tags: [],
         createdAt: now,
         updatedAt: now,
