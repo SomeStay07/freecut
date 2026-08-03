@@ -24,7 +24,7 @@ const projectPath = (root) => path.join(root, 'projects', 'p1', 'project.json')
 
 function request() {
   const recipe = {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     operations: [{ callerId: 'clip_1', op: 'addClip', mediaId: 'm1' }],
     render: { codec: 'h264', container: 'mp4', quality: 'high' },
   }

@@ -115,7 +115,7 @@ try {
   assert.equal(edited.project.timeline.items[0].from, 6)
 
   const checkpointRecipe = {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     operations: [
       {
         callerId: 'checkpoint_move',

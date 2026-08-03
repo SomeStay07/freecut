@@ -110,7 +110,7 @@ test('capabilities publish lifecycle constraints', () => {
 })
 
 const validCheckpointRecipe = {
-  schemaVersion: '1.0',
+  schemaVersion: '1.1',
   operations: [
     { callerId: 'track_1', op: 'addTrack', kind: 'video' },
     {
@@ -157,6 +157,25 @@ test('checkpoint recipe is closed, versioned, and reference ordered', () => {
   unknownPointer.recipe.operations[1].trackId = { $ref: 'track_1#/detail/id' }
   unknownPointer.recipeSha256 = qualifiedSha256(canonicalJsonBytes(unknownPointer.recipe))
   assert.equal(checkpointOperationRequestSchema.safeParse(unknownPointer).success, false)
+})
+
+test('checkpoint recipe 1.1 requires explicit linked control for linked-sensitive operations', () => {
+  for (const operation of [
+    { callerId: 'remove_1', op: 'removeItems', ids: ['item_1'] },
+    { callerId: 'split_1', op: 'split', id: 'item_1', frame: 1 },
+    { callerId: 'trim_start_1', op: 'trimStart', id: 'item_1', amount: 1 },
+    { callerId: 'trim_end_1', op: 'trimEnd', id: 'item_1', amount: 1 },
+  ]) {
+    const missing = validCheckpointRequest()
+    missing.recipe.operations = [operation]
+    missing.recipeSha256 = qualifiedSha256(canonicalJsonBytes(missing.recipe))
+    assert.equal(checkpointOperationRequestSchema.safeParse(missing).success, false, operation.op)
+
+    const explicit = validCheckpointRequest()
+    explicit.recipe.operations = [{ ...operation, linked: false }]
+    explicit.recipeSha256 = qualifiedSha256(canonicalJsonBytes(explicit.recipe))
+    assert.equal(checkpointOperationRequestSchema.safeParse(explicit).success, true, operation.op)
+  }
 })
 
 test('checkpoint request validates canonical ids, hashes, and portable output paths', () => {

@@ -4,7 +4,7 @@
 
 | Concern | Before 006A | 006A contract |
 | --- | --- | --- |
-| Recipe ownership | Generic edit requests expose a broad, partially open operation set. | FreeCut owns one closed `1.0` checkpoint recipe schema over an explicit edit subset. Unknown fields, operations, versions, references, and media IDs are rejected. |
+| Recipe ownership | Generic edit requests expose a broad, partially open operation set. | FreeCut owns one closed `1.1` checkpoint recipe schema over an explicit edit subset. Unknown fields, operations, versions, references, and media IDs are rejected. Linked-sensitive operations require an explicit `linked` boolean. |
 | Schema negotiation | Capabilities publish generated request schemas without a content identity. | Capabilities publish the recipe version, its canonical JSON Schema, and a `sha256:<hex>` hash of canonical schema bytes. |
 | Caller identity | Queue/status identifiers are generated in-process and reset on restart. | The caller supplies a canonical UUIDv7 operation ID and an idempotency key; both bind to one canonical request hash durably. |
 | Request durability | Synchronous handlers dispatch before any durable operation record exists. | Canonical request bytes and their qualified SHA-256 are persisted before the existing serialized queue is asked to dispatch. |
@@ -28,7 +28,7 @@
   "projectId": "reel_project",
   "expectedRevision": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "recipe": {
-    "schemaVersion": "1.0",
+    "schemaVersion": "1.1",
     "operations": [
       { "callerId": "track_1", "op": "addTrack", "kind": "video" },
       {
@@ -42,7 +42,7 @@
     ],
     "render": { "codec": "h264", "container": "mp4", "quality": "high" }
   },
-  "recipeSha256": "sha256:980858d0ae8e2a0cce40259d162a63cec226216b8847473be35441402bc57979",
+  "recipeSha256": "sha256:eebb237308b432a35093330eb6f67c48b204fc3a6df35cec273849342b994618",
   "outputRelativePath": "artifacts/reel_project/checkpoint.mp4"
 }
 ```
@@ -53,6 +53,14 @@ canonical request. A successful submission returns `202`; replaying the same ope
 idempotency key with the same canonical request returns the existing operation. Changed canonical
 bytes return `409`. Output paths must begin with `artifacts/`; project, media, and
 `.freecut-headless` namespaces are never valid artifact targets.
+
+Checkpoint recipe `1.1` requires `linked: true|false` on `removeItems`, `split`, `trimStart`, and
+`trimEnd`. The broader `/edit` wire contract accepts the same field optionally for backward
+compatibility. When present, FreeCut scopes the linked-selection override to that one operation and
+restores the prior process state in `finally`, including failure paths.
+
+The canonical recipe 1.1 JSON Schema hash advertised by capabilities is
+`sha256:b721d4668b6bdbe618cfbb6546bf991a6e413f6d1311bf50e7f5179e29d02793`.
 
 `GET /v1/checkpoint-operations/:id` returns only durable state. A successful terminal response has:
 

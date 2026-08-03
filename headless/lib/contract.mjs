@@ -208,10 +208,30 @@ const opSchemas = [
     })
     .strict(),
   z.object({ op: z.literal('moveItem'), id, from: frame, trackId: id.optional() }).strict(),
-  z.object({ op: z.literal('removeItems'), ids: z.array(id).min(1) }).strict(),
-  z.object({ op: z.literal('split'), id, frame }).strict(),
-  z.object({ op: z.literal('trimStart'), id, amount: positiveFrames }).strict(),
-  z.object({ op: z.literal('trimEnd'), id, amount: positiveFrames }).strict(),
+  z
+    .object({
+      op: z.literal('removeItems'),
+      ids: z.array(id).min(1),
+      linked: z.boolean().optional(),
+    })
+    .strict(),
+  z.object({ op: z.literal('split'), id, frame, linked: z.boolean().optional() }).strict(),
+  z
+    .object({
+      op: z.literal('trimStart'),
+      id,
+      amount: positiveFrames,
+      linked: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal('trimEnd'),
+      id,
+      amount: positiveFrames,
+      linked: z.boolean().optional(),
+    })
+    .strict(),
   z
     .object({
       op: z.literal('addTransition'),
@@ -652,7 +672,7 @@ export const layoutRequestSchema = z
     path: ['project'],
   })
 
-export const CHECKPOINT_RECIPE_SCHEMA_VERSION = '1.0'
+export const CHECKPOINT_RECIPE_SCHEMA_VERSION = '1.1'
 
 const checkpointReferenceSchema = z
   .object({
@@ -694,6 +714,7 @@ const checkpointRecipeOperationSchema = z.discriminatedUnion('op', [
       callerId: portableIdSchema,
       op: z.literal('removeItems'),
       ids: z.array(checkpointResourceSchema).min(1),
+      linked: z.boolean(),
     })
     .strict(),
   z
@@ -702,6 +723,7 @@ const checkpointRecipeOperationSchema = z.discriminatedUnion('op', [
       op: z.literal('split'),
       id: checkpointResourceSchema,
       frame,
+      linked: z.boolean(),
     })
     .strict(),
   z
@@ -710,6 +732,7 @@ const checkpointRecipeOperationSchema = z.discriminatedUnion('op', [
       op: z.literal('trimStart'),
       id: checkpointResourceSchema,
       amount: positiveFrames,
+      linked: z.boolean(),
     })
     .strict(),
   z
@@ -718,6 +741,7 @@ const checkpointRecipeOperationSchema = z.discriminatedUnion('op', [
       op: z.literal('trimEnd'),
       id: checkpointResourceSchema,
       amount: positiveFrames,
+      linked: z.boolean(),
     })
     .strict(),
 ])
