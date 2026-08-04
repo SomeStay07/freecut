@@ -97,6 +97,7 @@ import {
   createCheckpointOperationRunner,
   createCheckpointOperationStore,
 } from './lib/checkpoint-operations.mjs'
+import { conformFinalRenderArtifact, probeFinalRenderArtifact } from './lib/final-render-probe.mjs'
 
 const MIME_BY_RENDER_CONTAINER = {
   mp4: 'video/mp4',
@@ -358,6 +359,7 @@ async function main() {
         await fs.promises.rm(tempPath, { force: true })
         await fs.promises.rename(summary.outputPath, tempPath)
       }
+      if (renderProfile) await conformFinalRenderArtifact(tempPath, renderProfile)
       const mimeType = (
         summary.mimeType ?? MIME_BY_RENDER_CONTAINER[summary.effectiveSettings?.container]
       )
@@ -365,29 +367,9 @@ async function main() {
         .trim()
       return {
         mimeType,
-        ...(renderProfile
-          ? {
-              mediaProbe: {
-                width: summary.effectiveSettings?.resolution?.width,
-                height: summary.effectiveSettings?.resolution?.height,
-                durationMillis: Math.round(summary.durationSeconds * 1000),
-                videoCodec:
-                  summary.effectiveSettings?.codec === 'avc'
-                    ? 'h264'
-                    : summary.effectiveSettings?.codec,
-                pixelFormat: renderProfile.pixelFormat,
-                frameRate: {
-                  numerator: summary.effectiveSettings?.fps,
-                  denominator: 1,
-                },
-                audioCodec: summary.effectiveSettings?.audioCodec,
-                audioSampleRateHz: renderProfile.audioSampleRateHz,
-                audioChannels: renderProfile.audioChannels,
-              },
-            }
-          : {}),
       }
     },
+    probeFinalRenderArtifact,
   })
 
   const checkpointExecutionTimeoutMs = renderTimeoutMs + editTimeoutMs

@@ -12,6 +12,10 @@ import {
 
 const root = path.resolve(import.meta.dirname, '..')
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'freecut-lifecycle-e2e-'))
+fs.writeFileSync(
+  path.join(workspace, '.freecut-workspace.json'),
+  '{"schemaVersion":"2.0","createdAt":1}\n',
+)
 const port = 20_000 + Math.floor(Math.random() * 20_000)
 
 function generateToneWav(filePath) {
@@ -39,10 +43,40 @@ function generateToneWav(filePath) {
   fs.writeFileSync(filePath, wav)
 }
 
+function generateToneVideo(filePath) {
+  const result = spawnSync(
+    'ffmpeg',
+    [
+      '-v',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      'color=size=108x192:rate=25:duration=0.6',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=440:sample_rate=48000:duration=0.6',
+      '-c:v',
+      'libx264',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'aac',
+      '-ac',
+      '2',
+      '-shortest',
+      filePath,
+    ],
+    { encoding: 'utf8' },
+  )
+  assert.equal(result.status, 0, result.stderr)
+}
+
 async function jsonRequest(route, options) {
   const response = await fetch(`http://127.0.0.1:${port}${route}`, options)
   const body = await response.json()
-  assert.equal(response.ok, true, JSON.stringify(body))
+  assert.equal(response.ok, true, `${JSON.stringify(body)}\n${serviceLog}`)
   return { response, body }
 }
 
@@ -71,6 +105,8 @@ service.stderr.on('data', (chunk) => {
 let initialStatus
 let edited
 let checkpoint
+let finalRenderBody
+let finalRender
 try {
   let ready = false
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -118,6 +154,44 @@ try {
   edited = (await jsonRequest('/v1/projects/demo/edit', editOptions)).body
   assert.equal(edited.persisted, true)
   assert.equal(edited.project.timeline.items[0].from, 6)
+
+  const recordingDirectory = path.join(workspace, 'recording')
+  fs.mkdirSync(recordingDirectory, { recursive: true })
+  const finalAudioSource = path.join(recordingDirectory, 'tone.mp4')
+  generateToneVideo(finalAudioSource)
+  const finalAudioBytes = fs.readFileSync(finalAudioSource)
+  await jsonRequest('/v1/media/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'idempotency-key': 'import-final-audio' },
+    body: JSON.stringify({
+      mediaId: 'final_media',
+      projectId: 'demo',
+      sourceRelativePath: 'recording/tone.mp4',
+      expectedByteSize: finalAudioBytes.byteLength,
+      expectedSha256: qualifiedSha256(finalAudioBytes),
+    }),
+  })
+  edited = (
+    await jsonRequest('/v1/projects/demo/edit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': 'add-final-audio' },
+      body: JSON.stringify({
+        persist: true,
+        expectedRevision: edited.revision,
+        ops: [
+          { callerId: 'final_audio_track', op: 'addTrack', kind: 'video' },
+          {
+            callerId: 'final_audio',
+            op: 'addClip',
+            mediaId: 'final_media',
+            trackId: { $ref: 'final_audio_track#/detail/trackId' },
+            from: 0,
+            durationInFrames: 15,
+          },
+        ],
+      }),
+    })
+  ).body
 
   const checkpointRecipe = {
     schemaVersion: '1.1',
@@ -168,7 +242,7 @@ try {
   assert.equal(checkpoint.artifact.sha256, qualifiedSha256(checkpointArtifact))
   assert.equal(checkpoint.artifact.byteSize, checkpointArtifact.byteLength)
 
-  const finalRenderBody = {
+  finalRenderBody = {
     kind: 'final_render',
     operationId: '018f22d2-8d42-7c2a-a4cc-7a3f2c5f6b12',
     projectId: 'demo',
@@ -190,21 +264,20 @@ try {
     finalAccepted.body.operation.approvalBindingSha256,
     finalRenderBody.approvalBindingSha256,
   )
-  let finalRender
   for (let attempt = 0; attempt < 320; attempt++) {
     finalRender = (await jsonRequest(`/v1/checkpoint-operations/${finalRenderBody.operationId}`))
       .body.operation
     if (finalRender.state === 'succeeded' || finalRender.state === 'failed') break
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
-  assert.equal(finalRender?.state, 'succeeded', JSON.stringify(finalRender))
+  assert.equal(finalRender?.state, 'succeeded', `${JSON.stringify(finalRender)}\n${serviceLog}`)
   assert.equal(finalRender.artifact.mimeType, 'video/mp4')
   assert.equal(finalRender.artifact.mediaProbe.width, 1080)
   assert.equal(finalRender.artifact.mediaProbe.height, 1920)
   assert.equal(finalRender.artifact.mediaProbe.durationMillis > 0, true)
   assert.equal(finalRender.artifact.mediaProbe.videoCodec, 'h264')
   assert.equal(finalRender.artifact.mediaProbe.pixelFormat, 'yuv420p')
-  assert.deepEqual(finalRender.artifact.mediaProbe.frameRate, { numerator: 30, denominator: 1 })
+  assert.deepEqual(finalRender.artifact.mediaProbe.frameRate, { numerator: 25, denominator: 1 })
   assert.equal(finalRender.artifact.mediaProbe.audioCodec, 'aac')
   assert.equal(finalRender.artifact.mediaProbe.audioSampleRateHz, 48000)
   assert.equal(finalRender.artifact.mediaProbe.audioChannels, 2)
@@ -321,6 +394,13 @@ try {
   )
   assert.equal(restartedCheckpointResponse.status, 200)
   assert.equal((await restartedCheckpointResponse.json()).operation.state, 'succeeded')
+  const restartedFinalRenderResponse = await fetch(
+    `http://127.0.0.1:${restartPort}/v1/checkpoint-operations/${finalRenderBody.operationId}`,
+  )
+  assert.equal(restartedFinalRenderResponse.status, 200)
+  const restartedFinalRender = (await restartedFinalRenderResponse.json()).operation
+  assert.equal(restartedFinalRender.state, 'succeeded')
+  assert.deepEqual(restartedFinalRender.artifact.mediaProbe, finalRender.artifact.mediaProbe)
 } finally {
   const exited = new Promise((resolve) => restartedService.once('exit', () => resolve(true)))
   restartedService.kill('SIGTERM')

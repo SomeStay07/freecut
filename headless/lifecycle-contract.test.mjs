@@ -220,7 +220,7 @@ test('checkpoint request validates canonical ids, hashes, and portable output pa
 
 test('final render request is closed and bound to the fixed shorts profile', () => {
   assert.equal(checkpointOperationRequestSchema.safeParse(validFinalRenderRequest()).success, true)
-  assert.deepEqual(FINAL_RENDER_PROFILE.frameRate, { numerator: 30, denominator: 1 })
+  assert.deepEqual(FINAL_RENDER_PROFILE.frameRate, { numerator: 25, denominator: 1 })
   assert.equal(FINAL_RENDER_PROFILE.pixelFormat, 'yuv420p')
   assert.equal(FINAL_RENDER_PROFILE.audioSampleRateHz, 48000)
   assert.equal(FINAL_RENDER_PROFILE.audioChannels, 2)
@@ -229,6 +229,7 @@ test('final render request is closed and bound to the fixed shorts profile', () 
     (request) => (request.renderProfileSha256 = `sha256:${'0'.repeat(64)}`),
     (request) => (request.kind = 'future_render'),
     (request) => (request.surprise = true),
+    (request) => (request.outputRelativePath = 'artifacts/demo/final.webm'),
   ]) {
     const request = validFinalRenderRequest()
     mutate(request)
@@ -272,4 +273,15 @@ test('capabilities advertise the canonical checkpoint recipe schema hash', () =>
     result.schemas.finalRenderOperation.properties.renderProfile.const,
     FINAL_RENDER_PROFILE,
   )
+  assert.equal(result.schemas.finalRenderOperation.additionalProperties, false)
+  assert.deepEqual(Object.keys(result.schemas.finalRenderOperation.properties).sort(), [
+    'approvalBindingSha256',
+    'expectedRevision',
+    'kind',
+    'operationId',
+    'outputRelativePath',
+    'projectId',
+    'renderProfile',
+    'renderProfileSha256',
+  ])
 })

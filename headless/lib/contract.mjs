@@ -888,7 +888,7 @@ export const FINAL_RENDER_PROFILE = Object.freeze({
   width: 1080,
   height: 1920,
   pixelFormat: 'yuv420p',
-  frameRate: Object.freeze({ numerator: 30, denominator: 1 }),
+  frameRate: Object.freeze({ numerator: 25, denominator: 1 }),
   audioCodec: 'aac',
   audioSampleRateHz: 48000,
   audioChannels: 2,
@@ -951,7 +951,15 @@ const portableCheckpointLegacyOperationRequestSchema = withPortableOutputPath(
   checkpointLegacyOperationRequestSchema,
 )
 const portableFinalRenderOperationRequestSchema = withPortableOutputPath(
-  finalRenderOperationRequestSchema,
+  finalRenderOperationRequestSchema.superRefine((value, ctx) => {
+    if (!value.outputRelativePath.endsWith('.mp4')) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'final render outputRelativePath must end in .mp4',
+        path: ['outputRelativePath'],
+      })
+    }
+  }),
 )
 
 export const checkpointOperationRequestSchema = z.union([
@@ -960,13 +968,37 @@ export const checkpointOperationRequestSchema = z.union([
 ])
 
 const FINAL_RENDER_OPERATION_JSON_SCHEMA = Object.freeze({
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  type: 'object',
   properties: {
     kind: { const: 'final_render' },
+    operationId: {
+      type: 'string',
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+    },
+    projectId: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$' },
+    expectedRevision: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' },
     renderProfile: { const: FINAL_RENDER_PROFILE },
     renderProfileSha256: { const: FINAL_RENDER_PROFILE_SHA256 },
-    approvalBindingSha256: {},
+    approvalBindingSha256: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' },
+    outputRelativePath: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 1024,
+      pattern: '^artifacts/(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\u0000).+\\.mp4$',
+    },
   },
-  required: ['kind', 'renderProfile', 'renderProfileSha256', 'approvalBindingSha256'],
+  required: [
+    'kind',
+    'operationId',
+    'projectId',
+    'expectedRevision',
+    'renderProfile',
+    'renderProfileSha256',
+    'approvalBindingSha256',
+    'outputRelativePath',
+  ],
+  additionalProperties: false,
 })
 
 export function normalizeRenderInput(value) {

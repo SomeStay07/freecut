@@ -189,7 +189,7 @@ test('validation errors and capabilities are machine-readable and bounded', () =
   assert.ok(result.lifecycle.routes.includes('POST /v1/media/import'))
   assert.equal(result.lifecycle.httpMediaUpload, false)
   assert.equal(result.lifecycle.workspaceMediaImport, true)
-  assert.ok(JSON.stringify(result).length < 32_000)
+  assert.ok(JSON.stringify(result).length < 34_000)
 })
 
 test('media import contract is strict and requires qualified content identity', () => {

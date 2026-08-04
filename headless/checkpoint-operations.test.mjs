@@ -28,7 +28,7 @@ const finalMediaProbe = (overrides = {}) => ({
   durationMillis: 2000,
   videoCodec: 'h264',
   pixelFormat: 'yuv420p',
-  frameRate: { numerator: 30, denominator: 1 },
+  frameRate: { numerator: 25, denominator: 1 },
   audioCodec: 'aac',
   audioSampleRateHz: 48000,
   audioChannels: 2,
@@ -86,11 +86,9 @@ async function finalRenderHarness(root, { crashAt, mutateBeforeRender } = {}) {
       assert.deepEqual(renderProfile, FINAL_RENDER_PROFILE)
       await mutateBeforeRender?.({ file, loadProject })
       await fs.promises.writeFile(tempPath, 'fixed-final-render')
-      return {
-        mimeType: 'video/mp4',
-        mediaProbe: finalMediaProbe(),
-      }
+      return { mimeType: 'video/mp4' }
     },
+    probeFinalRenderArtifact: async () => finalMediaProbe(),
     onBoundary: async (name) => {
       if (name === crashAt) throw new CheckpointProcessCrash(name)
     },
@@ -245,11 +243,9 @@ test('final render follows render-only durable phases and exact replay semantics
     commitProject: async () => assert.fail(),
     renderArtifact: async ({ tempPath }) => {
       await fs.promises.writeFile(tempPath, 'fixed-final-render')
-      return {
-        mimeType: 'video/mp4',
-        mediaProbe: finalMediaProbe(),
-      }
+      return { mimeType: 'video/mp4' }
     },
+    probeFinalRenderArtifact: async () => finalMediaProbe(),
     onBoundary: async (name) => seen.push(name),
   })
   await setup.store.submit({ request: setup.req, idempotencyKey: 'final-key' })
@@ -311,11 +307,9 @@ test('final render re-verifies revision immediately before render and fails clos
       commitProject: async () => assert.fail(),
       renderArtifact: async ({ tempPath }) => {
         await fs.promises.writeFile(tempPath, 'wrong-profile')
-        return {
-          mimeType: 'video/mp4',
-          mediaProbe: finalMediaProbe({ width: 1920, height: 1080 }),
-        }
+        return { mimeType: 'video/mp4' }
       },
+      probeFinalRenderArtifact: async () => finalMediaProbe({ width: 1920, height: 1080 }),
     })
     const operation = await runner.execute(setup.req.operationId)
     assert.equal(operation.phase, 'failed')
@@ -354,6 +348,38 @@ test('final render restart never promotes merely rendered or unbound files to su
     assert.equal(operation.error.code, 'ARTIFACT_COLLISION')
     assert.equal(setup.counts().renders, 0)
   })
+})
+
+test('final render preserves observed media probe across every crash/restart boundary', async (t) => {
+  const boundaries = [
+    'after_revision_verified',
+    'after_rendering',
+    'after_render',
+    'after_pending_artifact',
+    'after_artifact_rename',
+    'after_artifact_committed',
+    'after_succeeded',
+  ]
+  for (const crashAt of boundaries) {
+    await t.test(crashAt, async (t) => {
+      const root = tempWorkspace()
+      t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+      const crashed = await finalRenderHarness(root, { crashAt })
+      await crashed.store.submit({ request: crashed.req, idempotencyKey: `final-${crashAt}` })
+      await assert.rejects(
+        () => crashed.runner.execute(crashed.req.operationId),
+        CheckpointProcessCrash,
+      )
+      const recovered = await finalRenderHarness(root)
+      const results = await recovered.runner.reconcile()
+      const operation = results[0] ?? (await recovered.store.get(crashed.req.operationId))
+      assert.equal(operation.phase, 'succeeded')
+      assert.deepEqual(operation.pendingArtifact.mediaProbe, finalMediaProbe())
+      assert.deepEqual(operation.artifact.mediaProbe, finalMediaProbe())
+      const bytes = await fs.promises.readFile(path.join(root, operation.artifact.relativePath))
+      assert.equal(operation.artifact.sha256, qualifiedSha256(bytes))
+    })
+  }
 })
 
 test('reconcile adopts the exact project receipt after a crash without double application', async (t) => {

@@ -422,6 +422,13 @@ export function createCheckpointOperationStore({ workspace, now = () => Date.now
         'renderProfileSha256 does not match renderProfile',
       )
     }
+    if (request.kind === 'final_render' && !request.outputRelativePath.endsWith('.mp4')) {
+      throw new CheckpointOperationError(
+        400,
+        'INVALID_OUTPUT_PATH',
+        'Final render output path must end in .mp4',
+      )
+    }
     const idempotencyKeyHash = keyHash(idempotencyKey)
     return withResourceLock(storeLock, async () => {
       const records = await list()
@@ -604,6 +611,7 @@ export function createCheckpointOperationRunner({
   applyRecipe,
   commitProject,
   renderArtifact,
+  probeFinalRenderArtifact,
   readApplicationReceipt = defaultReceiptReader,
   syncArtifactDirectory = fsyncDirectory,
   onBoundary = async () => {},
@@ -840,13 +848,37 @@ export function createCheckpointOperationRunner({
                   'Render did not provide a valid MIME type',
                 )
               }
+              let mediaProbe
+              if (finalRender) {
+                if (typeof probeFinalRenderArtifact !== 'function') {
+                  throw new CheckpointOperationError(
+                    500,
+                    'FINAL_RENDER_PROBE_UNAVAILABLE',
+                    'Final render byte probe is unavailable',
+                  )
+                }
+                try {
+                  mediaProbe = await probeFinalRenderArtifact(tempPath)
+                } catch {
+                  throw new CheckpointOperationError(
+                    500,
+                    'INVALID_RENDER_ARTIFACT',
+                    'Final render byte probe failed',
+                  )
+                }
+              }
               const nextArtifact = {
                 operationId,
                 relativePath: request.outputRelativePath,
                 ...temp,
                 mimeType,
                 ...(finalRender
-                  ? { mediaProbe: assertFinalRenderEvidence(request, rendered) }
+                  ? {
+                      mediaProbe: assertFinalRenderEvidence(request, {
+                        mimeType,
+                        mediaProbe,
+                      }),
+                    }
                   : {}),
               }
               if (
