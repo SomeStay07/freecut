@@ -860,7 +860,7 @@ export const CHECKPOINT_RECIPE_SCHEMA_SHA256 = qualifiedSha256(
   canonicalJsonBytes(checkpointRecipeJsonSchema),
 )
 
-export const checkpointOperationRequestSchema = z
+const checkpointLegacyOperationRequestSchema = z
   .object({
     operationId: uuidV7Schema,
     projectId: portableIdSchema,
@@ -878,6 +878,57 @@ export const checkpointOperationRequestSchema = z
         path: ['recipeSha256'],
       })
     }
+  })
+
+export const FINAL_RENDER_PROFILE = Object.freeze({
+  id: 'shorts-h264-high-v1',
+  codec: 'h264',
+  container: 'mp4',
+  quality: 'high',
+  width: 1080,
+  height: 1920,
+  pixelFormat: 'yuv420p',
+  frameRate: Object.freeze({ numerator: 25, denominator: 1 }),
+  audioCodec: 'aac',
+  audioSampleRateHz: 48000,
+  audioChannels: 2,
+})
+export const FINAL_RENDER_PROFILE_SHA256 = qualifiedSha256(canonicalJsonBytes(FINAL_RENDER_PROFILE))
+
+const finalRenderOperationRequestSchema = z
+  .object({
+    kind: z.literal('final_render'),
+    operationId: uuidV7Schema,
+    projectId: portableIdSchema,
+    expectedRevision: revisionSchema,
+    renderProfile: z
+      .object({
+        id: z.literal(FINAL_RENDER_PROFILE.id),
+        codec: z.literal(FINAL_RENDER_PROFILE.codec),
+        container: z.literal(FINAL_RENDER_PROFILE.container),
+        quality: z.literal(FINAL_RENDER_PROFILE.quality),
+        width: z.literal(FINAL_RENDER_PROFILE.width),
+        height: z.literal(FINAL_RENDER_PROFILE.height),
+        pixelFormat: z.literal(FINAL_RENDER_PROFILE.pixelFormat),
+        frameRate: z
+          .object({
+            numerator: z.literal(FINAL_RENDER_PROFILE.frameRate.numerator),
+            denominator: z.literal(FINAL_RENDER_PROFILE.frameRate.denominator),
+          })
+          .strict(),
+        audioCodec: z.literal(FINAL_RENDER_PROFILE.audioCodec),
+        audioSampleRateHz: z.literal(FINAL_RENDER_PROFILE.audioSampleRateHz),
+        audioChannels: z.literal(FINAL_RENDER_PROFILE.audioChannels),
+      })
+      .strict(),
+    renderProfileSha256: z.literal(FINAL_RENDER_PROFILE_SHA256),
+    approvalBindingSha256: revisionSchema,
+    outputRelativePath: z.string().min(1).max(1024),
+  })
+  .strict()
+
+const withPortableOutputPath = (schema) =>
+  schema.superRefine((value, ctx) => {
     const candidate = value.outputRelativePath
     const normalized = candidate.replace(/\\/g, '/')
     if (
@@ -895,6 +946,60 @@ export const checkpointOperationRequestSchema = z
       })
     }
   })
+
+const portableCheckpointLegacyOperationRequestSchema = withPortableOutputPath(
+  checkpointLegacyOperationRequestSchema,
+)
+const portableFinalRenderOperationRequestSchema = withPortableOutputPath(
+  finalRenderOperationRequestSchema.superRefine((value, ctx) => {
+    if (!value.outputRelativePath.endsWith('.mp4')) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'final render outputRelativePath must end in .mp4',
+        path: ['outputRelativePath'],
+      })
+    }
+  }),
+)
+
+export const checkpointOperationRequestSchema = z.union([
+  portableCheckpointLegacyOperationRequestSchema,
+  portableFinalRenderOperationRequestSchema,
+])
+
+const FINAL_RENDER_OPERATION_JSON_SCHEMA = Object.freeze({
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  type: 'object',
+  properties: {
+    kind: { const: 'final_render' },
+    operationId: {
+      type: 'string',
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+    },
+    projectId: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$' },
+    expectedRevision: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' },
+    renderProfile: { const: FINAL_RENDER_PROFILE },
+    renderProfileSha256: { const: FINAL_RENDER_PROFILE_SHA256 },
+    approvalBindingSha256: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' },
+    outputRelativePath: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 1024,
+      pattern: '^artifacts/(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\u0000).+\\.mp4$',
+    },
+  },
+  required: [
+    'kind',
+    'operationId',
+    'projectId',
+    'expectedRevision',
+    'renderProfile',
+    'renderProfileSha256',
+    'approvalBindingSha256',
+    'outputRelativePath',
+  ],
+  additionalProperties: false,
+})
 
 export function normalizeRenderInput(value) {
   const out = { ...value }
@@ -950,13 +1055,40 @@ export function capabilities() {
       lifecycleEdit: z.toJSONSchema(lifecycleEditRequestSchema, { target: 'draft-7' }),
       mediaProbe: z.toJSONSchema(mediaProbeRequestSchema, { target: 'draft-7' }),
       mediaImport: z.toJSONSchema(mediaImportRequestSchema, { target: 'draft-7' }),
-      checkpointOperation: z.toJSONSchema(checkpointOperationRequestSchema, { target: 'draft-7' }),
+      checkpointOperation: z.toJSONSchema(portableCheckpointLegacyOperationRequestSchema, {
+        target: 'draft-7',
+      }),
+      finalRenderOperation: FINAL_RENDER_OPERATION_JSON_SCHEMA,
     },
     checkpointRecipe: {
       schemaVersion: CHECKPOINT_RECIPE_SCHEMA_VERSION,
       schemaSha256: CHECKPOINT_RECIPE_SCHEMA_SHA256,
       schema: checkpointRecipeJsonSchema,
       canonicalization: 'sorted-object-keys-json-utf8',
+    },
+    finalRender: {
+      kind: 'final_render',
+      renderProfileSha256: FINAL_RENDER_PROFILE_SHA256,
+      approvalBinding: 'sha256',
+      phases: [
+        'queued',
+        'revision_verified',
+        'rendering',
+        'artifact_committed',
+        'succeeded',
+        'failed',
+      ],
+      artifactMediaProbeKeys: [
+        'width',
+        'height',
+        'durationMillis',
+        'videoCodec',
+        'pixelFormat',
+        'frameRate',
+        'audioCodec',
+        'audioSampleRateHz',
+        'audioChannels',
+      ],
     },
     lifecycle: {
       routes: [

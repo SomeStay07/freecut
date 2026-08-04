@@ -97,6 +97,7 @@ import {
   createCheckpointOperationRunner,
   createCheckpointOperationStore,
 } from './lib/checkpoint-operations.mjs'
+import { conformFinalRenderArtifact, probeFinalRenderArtifact } from './lib/final-render-probe.mjs'
 
 const MIME_BY_RENDER_CONTAINER = {
   mp4: 'video/mp4',
@@ -324,13 +325,26 @@ async function main() {
         expectedRevision,
         receipt,
       }),
-    renderArtifact: async ({ project, recipe, tempPath }) => {
+    renderArtifact: async ({ project, recipe, renderProfile, tempPath }) => {
       for (const container of ['mp4', 'webm', 'mov', 'mkv', 'mp3', 'wav', 'm4a']) {
         await fs.promises.rm(outputPathForContainer(tempPath, container), { force: true })
       }
       const job = prepareJob(
         workspace,
-        { projectObject: projectForEngine(project), ...recipe.render, out: tempPath },
+        {
+          projectObject: projectForEngine(project),
+          ...(renderProfile
+            ? {
+                codec: renderProfile.codec,
+                container: renderProfile.container,
+                quality: renderProfile.quality,
+                resolution: `${renderProfile.width}x${renderProfile.height}`,
+                fps: renderProfile.frameRate.numerator / renderProfile.frameRate.denominator,
+                strict: true,
+              }
+            : recipe.render),
+          out: tempPath,
+        },
         mediaUrlOf,
       )
       assertHardwareGpuForJob(job, isSoftwareGpu(gpu))
@@ -345,13 +359,17 @@ async function main() {
         await fs.promises.rm(tempPath, { force: true })
         await fs.promises.rename(summary.outputPath, tempPath)
       }
+      if (renderProfile) await conformFinalRenderArtifact(tempPath, renderProfile)
       const mimeType = (
         summary.mimeType ?? MIME_BY_RENDER_CONTAINER[summary.effectiveSettings?.container]
       )
         ?.split(';', 1)[0]
         .trim()
-      return { mimeType }
+      return {
+        mimeType,
+      }
     },
+    probeFinalRenderArtifact,
   })
 
   const checkpointExecutionTimeoutMs = renderTimeoutMs + editTimeoutMs
@@ -399,7 +417,12 @@ async function main() {
       phase: record.phase,
       projectId: request.projectId,
       expectedRevision: request.expectedRevision,
-      recipeSha256: request.recipeSha256,
+      kind: request.kind ?? 'checkpoint',
+      ...(request.recipeSha256 ? { recipeSha256: request.recipeSha256 } : {}),
+      ...(request.renderProfileSha256 ? { renderProfileSha256: request.renderProfileSha256 } : {}),
+      ...(request.approvalBindingSha256
+        ? { approvalBindingSha256: request.approvalBindingSha256 }
+        : {}),
       requestSha256: record.requestSha256 ?? record.requestHash,
       ...(record.resultingRevision ? { resultingRevision: record.resultingRevision } : {}),
       ...(record.error ? { error: record.error } : {}),
@@ -415,7 +438,10 @@ async function main() {
     const submitted = await checkpointStore.submit({
       request,
       idempotencyKey: req.headers['idempotency-key'],
-      beforeCreate: () => assertCheckpointRecipeMedia(request.recipe),
+      beforeCreate: () =>
+        request.kind === 'final_render'
+          ? Promise.resolve()
+          : assertCheckpointRecipeMedia(request.recipe),
     })
     runCheckpointPump()
     if (!submitted.created) res.setHeader('Idempotency-Replayed', 'true')

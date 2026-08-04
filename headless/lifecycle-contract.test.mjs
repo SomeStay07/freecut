@@ -7,6 +7,8 @@ import {
   capabilities,
   checkpointOperationRequestSchema,
   checkpointRecipeJsonSchema,
+  FINAL_RENDER_PROFILE,
+  FINAL_RENDER_PROFILE_SHA256,
   lifecycleEditRequestSchema,
   mediaProbeRequestSchema,
   projectCreateRequestSchema,
@@ -134,6 +136,17 @@ const validCheckpointRequest = () => ({
   outputRelativePath: 'artifacts/project_1/checkpoint.mp4',
 })
 
+const validFinalRenderRequest = () => ({
+  kind: 'final_render',
+  operationId: '018f22d2-8d42-7c2a-a4cc-7a3f2c5f6b11',
+  projectId: 'project_1',
+  expectedRevision: `sha256:${'1'.repeat(64)}`,
+  renderProfile: structuredClone(FINAL_RENDER_PROFILE),
+  renderProfileSha256: FINAL_RENDER_PROFILE_SHA256,
+  approvalBindingSha256: `sha256:${'2'.repeat(64)}`,
+  outputRelativePath: 'artifacts/project_1/final.mp4',
+})
+
 test('checkpoint recipe is closed, versioned, and reference ordered', () => {
   assert.equal(checkpointOperationRequestSchema.safeParse(validCheckpointRequest()).success, true)
   const unknownField = validCheckpointRequest()
@@ -205,6 +218,25 @@ test('checkpoint request validates canonical ids, hashes, and portable output pa
   }
 })
 
+test('final render request is closed and bound to the fixed shorts profile', () => {
+  assert.equal(checkpointOperationRequestSchema.safeParse(validFinalRenderRequest()).success, true)
+  assert.deepEqual(FINAL_RENDER_PROFILE.frameRate, { numerator: 25, denominator: 1 })
+  assert.equal(FINAL_RENDER_PROFILE.pixelFormat, 'yuv420p')
+  assert.equal(FINAL_RENDER_PROFILE.audioSampleRateHz, 48000)
+  assert.equal(FINAL_RENDER_PROFILE.audioChannels, 2)
+  for (const mutate of [
+    (request) => (request.renderProfile.width = 1920),
+    (request) => (request.renderProfileSha256 = `sha256:${'0'.repeat(64)}`),
+    (request) => (request.kind = 'future_render'),
+    (request) => (request.surprise = true),
+    (request) => (request.outputRelativePath = 'artifacts/demo/final.webm'),
+  ]) {
+    const request = validFinalRenderRequest()
+    mutate(request)
+    assert.equal(checkpointOperationRequestSchema.safeParse(request).success, false)
+  }
+})
+
 test('capabilities advertise the canonical checkpoint recipe schema hash', () => {
   const result = capabilities()
   assert.equal(result.checkpointRecipe.schemaVersion, CHECKPOINT_RECIPE_SCHEMA_VERSION)
@@ -214,4 +246,42 @@ test('capabilities advertise the canonical checkpoint recipe schema hash', () =>
     qualifiedSha256(canonicalJsonBytes(checkpointRecipeJsonSchema)),
   )
   assert.ok(result.lifecycle.routes.includes('POST /v1/checkpoint-operations'))
+  assert.equal(result.finalRender.kind, 'final_render')
+  assert.equal(result.finalRender.renderProfileSha256, FINAL_RENDER_PROFILE_SHA256)
+  assert.equal(result.finalRender.approvalBinding, 'sha256')
+  assert.deepEqual(result.finalRender.phases, [
+    'queued',
+    'revision_verified',
+    'rendering',
+    'artifact_committed',
+    'succeeded',
+    'failed',
+  ])
+  assert.deepEqual(result.finalRender.artifactMediaProbeKeys, [
+    'width',
+    'height',
+    'durationMillis',
+    'videoCodec',
+    'pixelFormat',
+    'frameRate',
+    'audioCodec',
+    'audioSampleRateHz',
+    'audioChannels',
+  ])
+  assert.equal(result.schemas.finalRenderOperation.properties.kind.const, 'final_render')
+  assert.deepEqual(
+    result.schemas.finalRenderOperation.properties.renderProfile.const,
+    FINAL_RENDER_PROFILE,
+  )
+  assert.equal(result.schemas.finalRenderOperation.additionalProperties, false)
+  assert.deepEqual(Object.keys(result.schemas.finalRenderOperation.properties).sort(), [
+    'approvalBindingSha256',
+    'expectedRevision',
+    'kind',
+    'operationId',
+    'outputRelativePath',
+    'projectId',
+    'renderProfile',
+    'renderProfileSha256',
+  ])
 })
