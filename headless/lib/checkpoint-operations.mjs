@@ -144,22 +144,45 @@ const isArtifact = (value, { pending = false, operationId } = {}) => {
   )
 }
 
-const isMediaProbe = (value) =>
-  hasExactKeys(value, ['width', 'height', 'durationSeconds', 'fps', 'videoCodec', 'audioCodec']) &&
-  [
+const isMediaProbe = (value) => {
+  if (
+    !hasExactKeys(value, [
+      'width',
+      'height',
+      'durationMillis',
+      'videoCodec',
+      'pixelFormat',
+      'frameRate',
+      'audioCodec',
+      'audioSampleRateHz',
+      'audioChannels',
+    ]) ||
+    !hasExactKeys(value.frameRate, ['numerator', 'denominator'])
+  )
+    return false
+  return [
     Number.isSafeInteger(value.width),
     value.width > 0,
     Number.isSafeInteger(value.height),
     value.height > 0,
-    Number.isFinite(value.durationSeconds),
-    value.durationSeconds >= 0,
-    Number.isFinite(value.fps),
-    value.fps > 0,
+    Number.isSafeInteger(value.durationMillis),
+    value.durationMillis >= 0,
     typeof value.videoCodec === 'string',
     value.videoCodec.length > 0,
+    typeof value.pixelFormat === 'string',
+    value.pixelFormat.length > 0,
+    Number.isSafeInteger(value.frameRate.numerator),
+    value.frameRate.numerator > 0,
+    Number.isSafeInteger(value.frameRate.denominator),
+    value.frameRate.denominator > 0,
     typeof value.audioCodec === 'string',
     value.audioCodec.length > 0,
+    Number.isSafeInteger(value.audioSampleRateHz),
+    value.audioSampleRateHz > 0,
+    Number.isSafeInteger(value.audioChannels),
+    value.audioChannels > 0,
   ].every(Boolean)
+}
 
 const matchesFinalRenderProfile = (request, artifact) => {
   if (!artifact) return false
@@ -170,7 +193,12 @@ const matchesFinalRenderProfile = (request, artifact) => {
     probe.width === request.renderProfile.width,
     probe.height === request.renderProfile.height,
     probe.videoCodec === request.renderProfile.codec,
-    probe.audioCodec === 'aac',
+    probe.pixelFormat === request.renderProfile.pixelFormat,
+    probe.frameRate.numerator === request.renderProfile.frameRate.numerator,
+    probe.frameRate.denominator === request.renderProfile.frameRate.denominator,
+    probe.audioCodec === request.renderProfile.audioCodec,
+    probe.audioSampleRateHz === request.renderProfile.audioSampleRateHz,
+    probe.audioChannels === request.renderProfile.audioChannels,
   ].every(Boolean)
 }
 

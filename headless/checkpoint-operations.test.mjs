@@ -22,6 +22,18 @@ import {
 const OPERATION_ID = '018f22d2-8d42-7c2a-a4cc-7a3f2c5f6b10'
 const tempWorkspace = () => fs.mkdtempSync(path.join(os.tmpdir(), 'freecut-checkpoint-'))
 const projectPath = (root) => path.join(root, 'projects', 'p1', 'project.json')
+const finalMediaProbe = (overrides = {}) => ({
+  width: 1080,
+  height: 1920,
+  durationMillis: 2000,
+  videoCodec: 'h264',
+  pixelFormat: 'yuv420p',
+  frameRate: { numerator: 30, denominator: 1 },
+  audioCodec: 'aac',
+  audioSampleRateHz: 48000,
+  audioChannels: 2,
+  ...overrides,
+})
 
 function request() {
   const recipe = {
@@ -76,14 +88,7 @@ async function finalRenderHarness(root, { crashAt, mutateBeforeRender } = {}) {
       await fs.promises.writeFile(tempPath, 'fixed-final-render')
       return {
         mimeType: 'video/mp4',
-        mediaProbe: {
-          width: 1080,
-          height: 1920,
-          durationSeconds: 2,
-          fps: 30,
-          videoCodec: 'h264',
-          audioCodec: 'aac',
-        },
+        mediaProbe: finalMediaProbe(),
       }
     },
     onBoundary: async (name) => {
@@ -242,14 +247,7 @@ test('final render follows render-only durable phases and exact replay semantics
       await fs.promises.writeFile(tempPath, 'fixed-final-render')
       return {
         mimeType: 'video/mp4',
-        mediaProbe: {
-          width: 1080,
-          height: 1920,
-          durationSeconds: 2,
-          fps: 30,
-          videoCodec: 'h264',
-          audioCodec: 'aac',
-        },
+        mediaProbe: finalMediaProbe(),
       }
     },
     onBoundary: async (name) => seen.push(name),
@@ -269,14 +267,7 @@ test('final render follows render-only durable phases and exact replay semantics
   )
   const operation = await runner.execute(setup.req.operationId)
   assert.equal(operation.phase, 'succeeded')
-  assert.deepEqual(operation.artifact.mediaProbe, {
-    width: 1080,
-    height: 1920,
-    durationSeconds: 2,
-    fps: 30,
-    videoCodec: 'h264',
-    audioCodec: 'aac',
-  })
+  assert.deepEqual(operation.artifact.mediaProbe, finalMediaProbe())
   assert.deepEqual(
     seen.filter((name) => name.startsWith('after_') && !name.includes('pending')),
     [
@@ -322,14 +313,7 @@ test('final render re-verifies revision immediately before render and fails clos
         await fs.promises.writeFile(tempPath, 'wrong-profile')
         return {
           mimeType: 'video/mp4',
-          mediaProbe: {
-            width: 1920,
-            height: 1080,
-            durationSeconds: 2,
-            fps: 30,
-            videoCodec: 'h264',
-            audioCodec: 'aac',
-          },
+          mediaProbe: finalMediaProbe({ width: 1920, height: 1080 }),
         }
       },
     })

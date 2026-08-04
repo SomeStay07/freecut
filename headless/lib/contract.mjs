@@ -887,6 +887,11 @@ export const FINAL_RENDER_PROFILE = Object.freeze({
   quality: 'high',
   width: 1080,
   height: 1920,
+  pixelFormat: 'yuv420p',
+  frameRate: Object.freeze({ numerator: 30, denominator: 1 }),
+  audioCodec: 'aac',
+  audioSampleRateHz: 48000,
+  audioChannels: 2,
 })
 export const FINAL_RENDER_PROFILE_SHA256 = qualifiedSha256(canonicalJsonBytes(FINAL_RENDER_PROFILE))
 
@@ -904,6 +909,16 @@ const finalRenderOperationRequestSchema = z
         quality: z.literal(FINAL_RENDER_PROFILE.quality),
         width: z.literal(FINAL_RENDER_PROFILE.width),
         height: z.literal(FINAL_RENDER_PROFILE.height),
+        pixelFormat: z.literal(FINAL_RENDER_PROFILE.pixelFormat),
+        frameRate: z
+          .object({
+            numerator: z.literal(FINAL_RENDER_PROFILE.frameRate.numerator),
+            denominator: z.literal(FINAL_RENDER_PROFILE.frameRate.denominator),
+          })
+          .strict(),
+        audioCodec: z.literal(FINAL_RENDER_PROFILE.audioCodec),
+        audioSampleRateHz: z.literal(FINAL_RENDER_PROFILE.audioSampleRateHz),
+        audioChannels: z.literal(FINAL_RENDER_PROFILE.audioChannels),
       })
       .strict(),
     renderProfileSha256: z.literal(FINAL_RENDER_PROFILE_SHA256),
@@ -948,13 +963,13 @@ const FINAL_RENDER_OPERATION_JSON_SCHEMA = Object.freeze({
   type: 'object',
   properties: {
     kind: { const: 'final_render' },
-    operationId: { type: 'string' },
-    projectId: { type: 'string' },
-    expectedRevision: { type: 'string' },
+    operationId: {},
+    projectId: {},
+    expectedRevision: {},
     renderProfile: { const: FINAL_RENDER_PROFILE },
     renderProfileSha256: { const: FINAL_RENDER_PROFILE_SHA256 },
-    approvalBindingSha256: { type: 'string' },
-    outputRelativePath: { type: 'string' },
+    approvalBindingSha256: {},
+    outputRelativePath: {},
   },
   required: [
     'kind',
@@ -1035,16 +1050,17 @@ export function capabilities() {
       canonicalization: 'sorted-object-keys-json-utf8',
     },
     finalRender: {
-      kind: 'final_render',
-      renderProfileSha256: FINAL_RENDER_PROFILE_SHA256,
       approvalBinding: 'sha256',
-      phases: [
-        'queued',
-        'revision_verified',
-        'rendering',
-        'artifact_committed',
-        'succeeded',
-        'failed',
+      artifactMediaProbeKeys: [
+        'width',
+        'height',
+        'durationMillis',
+        'videoCodec',
+        'pixelFormat',
+        'frameRate',
+        'audioCodec',
+        'audioSampleRateHz',
+        'audioChannels',
       ],
     },
     lifecycle: {

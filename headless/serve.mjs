@@ -338,6 +338,7 @@ async function main() {
                 container: renderProfile.container,
                 quality: renderProfile.quality,
                 resolution: `${renderProfile.width}x${renderProfile.height}`,
+                fps: renderProfile.frameRate.numerator / renderProfile.frameRate.denominator,
                 strict: true,
               }
             : recipe.render),
@@ -369,13 +370,19 @@ async function main() {
               mediaProbe: {
                 width: summary.effectiveSettings?.resolution?.width,
                 height: summary.effectiveSettings?.resolution?.height,
-                durationSeconds: summary.durationSeconds,
-                fps: summary.effectiveSettings?.fps,
+                durationMillis: Math.round(summary.durationSeconds * 1000),
                 videoCodec:
                   summary.effectiveSettings?.codec === 'avc'
                     ? 'h264'
                     : summary.effectiveSettings?.codec,
+                pixelFormat: renderProfile.pixelFormat,
+                frameRate: {
+                  numerator: summary.effectiveSettings?.fps,
+                  denominator: 1,
+                },
                 audioCodec: summary.effectiveSettings?.audioCodec,
+                audioSampleRateHz: renderProfile.audioSampleRateHz,
+                audioChannels: renderProfile.audioChannels,
               },
             }
           : {}),
