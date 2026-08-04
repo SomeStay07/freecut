@@ -7,6 +7,7 @@ import { atomicWriteFile, withResourceLock } from './lifecycle-store.mjs'
 
 export const CHECKPOINT_PHASES = Object.freeze([
   'queued',
+  'revision_verified',
   'applying_recipe',
   'project_committed',
   'rendering',
@@ -128,6 +129,7 @@ const isArtifact = (value, { pending = false, operationId } = {}) => {
     'sha256',
     'byteSize',
     'mimeType',
+    ...(value?.mediaProbe ? ['mediaProbe'] : []),
   ]
   return (
     hasExactKeys(value, keys) &&
@@ -137,8 +139,39 @@ const isArtifact = (value, { pending = false, operationId } = {}) => {
     Number.isSafeInteger(value.byteSize) &&
     value.byteSize >= 0 &&
     typeof value.mimeType === 'string' &&
-    /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(value.mimeType)
+    /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(value.mimeType) &&
+    (!value.mediaProbe || isMediaProbe(value.mediaProbe))
   )
+}
+
+const isMediaProbe = (value) =>
+  hasExactKeys(value, ['width', 'height', 'durationSeconds', 'fps', 'videoCodec', 'audioCodec']) &&
+  [
+    Number.isSafeInteger(value.width),
+    value.width > 0,
+    Number.isSafeInteger(value.height),
+    value.height > 0,
+    Number.isFinite(value.durationSeconds),
+    value.durationSeconds >= 0,
+    Number.isFinite(value.fps),
+    value.fps > 0,
+    typeof value.videoCodec === 'string',
+    value.videoCodec.length > 0,
+    typeof value.audioCodec === 'string',
+    value.audioCodec.length > 0,
+  ].every(Boolean)
+
+const matchesFinalRenderProfile = (request, artifact) => {
+  if (!artifact) return false
+  const probe = artifact.mediaProbe
+  if (!isMediaProbe(probe)) return false
+  return [
+    artifact.mimeType === 'video/mp4',
+    probe.width === request.renderProfile.width,
+    probe.height === request.renderProfile.height,
+    probe.videoCodec === request.renderProfile.codec,
+    probe.audioCodec === 'aac',
+  ].every(Boolean)
 }
 
 function assertRecord(record, expectedId) {
@@ -184,9 +217,30 @@ function assertRecord(record, expectedId) {
       'Checkpoint record is corrupt',
     )
   }
+  let request
+  try {
+    const bytes = Buffer.from(record.canonicalRequest)
+    request = JSON.parse(record.canonicalRequest)
+    if (
+      qualifiedSha256(bytes) !== record.requestSha256 ||
+      !canonicalJsonBytes(request).equals(bytes) ||
+      request.operationId !== expectedId
+    )
+      throw new Error()
+  } catch {
+    throw new CheckpointOperationError(
+      500,
+      'CHECKPOINT_RECORD_CORRUPT',
+      'Checkpoint record is corrupt',
+    )
+  }
+  const finalRender = request.kind === 'final_render'
   const hasRevision = SHA256.test(record.resultingRevision ?? '')
   const hasPending = isArtifact(record.pendingArtifact, { pending: true, operationId: expectedId })
   const hasArtifact = isArtifact(record.artifact)
+  const pendingProbeValid =
+    !finalRender || matchesFinalRenderProfile(request, record.pendingArtifact)
+  const artifactProbeValid = !finalRender || matchesFinalRenderProfile(request, record.artifact)
   const hasError =
     hasExactKeys(record.error, ['code', 'message']) &&
     typeof record.error.code === 'string' &&
@@ -203,12 +257,21 @@ function assertRecord(record, expectedId) {
       !artifactPresent &&
       !errorPresent) ||
     (record.phase === 'applying_recipe' &&
+      !finalRender &&
       record.state === 'running' &&
       !revisionPresent &&
       !pendingPresent &&
       !artifactPresent &&
       !errorPresent) ||
     (record.phase === 'project_committed' &&
+      !finalRender &&
+      record.state === 'running' &&
+      hasRevision &&
+      !pendingPresent &&
+      !artifactPresent &&
+      !errorPresent) ||
+    (record.phase === 'revision_verified' &&
+      finalRender &&
       record.state === 'running' &&
       hasRevision &&
       !pendingPresent &&
@@ -217,47 +280,32 @@ function assertRecord(record, expectedId) {
     (record.phase === 'rendering' &&
       record.state === 'running' &&
       hasRevision &&
-      (!pendingPresent || hasPending) &&
+      (!pendingPresent || (hasPending && pendingProbeValid)) &&
       !artifactPresent &&
       !errorPresent) ||
     (record.phase === 'artifact_committed' &&
       record.state === 'running' &&
       hasRevision &&
       hasPending &&
+      pendingProbeValid &&
       hasArtifact &&
+      artifactProbeValid &&
       !errorPresent) ||
     (record.phase === 'succeeded' &&
       record.state === 'succeeded' &&
       hasRevision &&
       hasPending &&
+      pendingProbeValid &&
       hasArtifact &&
+      artifactProbeValid &&
       !errorPresent) ||
     (record.phase === 'failed' &&
       record.state === 'failed' &&
       hasError &&
       (!revisionPresent || hasRevision) &&
-      (!pendingPresent || hasPending) &&
-      (!artifactPresent || hasArtifact))
+      (!pendingPresent || (hasPending && pendingProbeValid)) &&
+      (!artifactPresent || (hasArtifact && artifactProbeValid)))
   if (!phaseValid) {
-    throw new CheckpointOperationError(
-      500,
-      'CHECKPOINT_RECORD_CORRUPT',
-      'Checkpoint record is corrupt',
-    )
-  }
-  const bytes = Buffer.from(record.canonicalRequest)
-  if (qualifiedSha256(bytes) !== record.requestSha256) {
-    throw new CheckpointOperationError(
-      500,
-      'CHECKPOINT_RECORD_CORRUPT',
-      'Checkpoint record is corrupt',
-    )
-  }
-  try {
-    const request = JSON.parse(record.canonicalRequest)
-    if (!canonicalJsonBytes(request).equals(bytes) || request.operationId !== expectedId)
-      throw new Error()
-  } catch {
     throw new CheckpointOperationError(
       500,
       'CHECKPOINT_RECORD_CORRUPT',
@@ -326,11 +374,24 @@ export function createCheckpointOperationStore({ workspace, now = () => Date.now
     }
     const canonicalRequest = canonicalJsonBytes(request)
     const requestSha256 = qualifiedSha256(canonicalRequest)
-    if (qualifiedSha256(canonicalJsonBytes(request.recipe)) !== request.recipeSha256) {
+    if (
+      request.kind !== 'final_render' &&
+      qualifiedSha256(canonicalJsonBytes(request.recipe)) !== request.recipeSha256
+    ) {
       throw new CheckpointOperationError(
         400,
         'RECIPE_HASH_MISMATCH',
         'recipeSha256 does not match recipe',
+      )
+    }
+    if (
+      request.kind === 'final_render' &&
+      qualifiedSha256(canonicalJsonBytes(request.renderProfile)) !== request.renderProfileSha256
+    ) {
+      throw new CheckpointOperationError(
+        400,
+        'RENDER_PROFILE_HASH_MISMATCH',
+        'renderProfileSha256 does not match renderProfile',
       )
     }
     const idempotencyKeyHash = keyHash(idempotencyKey)
@@ -439,6 +500,17 @@ const defaultReceiptReader = (resource, operationId) =>
 function publicFailure(error) {
   if (error instanceof CheckpointOperationError) return { code: error.code, message: error.message }
   return { code: 'CHECKPOINT_OPERATION_FAILED', message: 'Checkpoint operation failed' }
+}
+
+function assertFinalRenderEvidence(request, rendered) {
+  if (!matchesFinalRenderProfile(request, rendered)) {
+    throw new CheckpointOperationError(
+      409,
+      'RENDER_PROFILE_MISMATCH',
+      'Rendered artifact or media probe does not match the fixed final render profile',
+    )
+  }
+  return rendered.mediaProbe
 }
 
 async function inspectArtifact(file) {
@@ -588,8 +660,25 @@ export function createCheckpointOperationRunner({
       let record = await store.get(operationId)
       if (TERMINAL_PHASES.has(record.phase)) return record
       const request = JSON.parse(record.canonicalRequest)
+      const finalRender = request.kind === 'final_render'
       try {
-        if (record.phase === 'queued') record = await persistPhase(record, 'applying_recipe')
+        if (record.phase === 'queued') {
+          if (finalRender) {
+            const resource = await loadProject(request.projectId)
+            if (resource.revision !== request.expectedRevision) {
+              throw new CheckpointOperationError(
+                409,
+                'REVISION_CONFLICT',
+                'Project revision does not match expectedRevision',
+              )
+            }
+            record = await persistPhase(record, 'revision_verified', {
+              resultingRevision: resource.revision,
+            })
+          } else {
+            record = await persistPhase(record, 'applying_recipe')
+          }
+        }
 
         if (record.phase === 'applying_recipe') {
           const receiptBinding = expectedReceiptBinding(record, request)
@@ -651,6 +740,7 @@ export function createCheckpointOperationRunner({
         }
 
         if (record.phase === 'project_committed') record = await persistPhase(record, 'rendering')
+        if (record.phase === 'revision_verified') record = await persistPhase(record, 'rendering')
 
         if (record.phase === 'rendering') {
           const resource = await loadProject(request.projectId)
@@ -688,10 +778,20 @@ export function createCheckpointOperationRunner({
             }
             if (!temp) {
               await fs.promises.rm(tempPath, { force: true })
+              const renderResource = finalRender ? await loadProject(request.projectId) : resource
+              if (renderResource.revision !== record.resultingRevision) {
+                throw new CheckpointOperationError(
+                  409,
+                  'RENDER_REVISION_MISMATCH',
+                  'Project no longer matches the verified revision',
+                )
+              }
               const rendered = await renderArtifact({
-                project: resource.project,
-                revision: resource.revision,
-                recipe: request.recipe,
+                project: renderResource.project,
+                revision: renderResource.revision,
+                ...(finalRender
+                  ? { renderProfile: request.renderProfile }
+                  : { recipe: request.recipe }),
                 operation: record,
                 tempPath,
               })
@@ -717,12 +817,16 @@ export function createCheckpointOperationRunner({
                 relativePath: request.outputRelativePath,
                 ...temp,
                 mimeType,
+                ...(finalRender
+                  ? { mediaProbe: assertFinalRenderEvidence(request, rendered) }
+                  : {}),
               }
               if (
                 artifact &&
                 (artifact.sha256 !== nextArtifact.sha256 ||
                   artifact.byteSize !== nextArtifact.byteSize ||
-                  artifact.mimeType !== nextArtifact.mimeType)
+                  artifact.mimeType !== nextArtifact.mimeType ||
+                  JSON.stringify(artifact.mediaProbe) !== JSON.stringify(nextArtifact.mediaProbe))
               ) {
                 throw new CheckpointOperationError(
                   409,
@@ -752,6 +856,7 @@ export function createCheckpointOperationRunner({
               sha256: artifact.sha256,
               byteSize: artifact.byteSize,
               mimeType: artifact.mimeType,
+              ...(artifact.mediaProbe ? { mediaProbe: artifact.mediaProbe } : {}),
             },
           })
         }

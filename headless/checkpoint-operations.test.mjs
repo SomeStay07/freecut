@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { canonicalJsonBytes, qualifiedSha256 } from './lib/contract.mjs'
+import { FINAL_RENDER_PROFILE, FINAL_RENDER_PROFILE_SHA256 } from './lib/contract.mjs'
 import {
   atomicWriteFile,
   createProjectResource,
@@ -36,6 +37,60 @@ function request() {
     recipeSha256: qualifiedSha256(canonicalJsonBytes(recipe)),
     outputRelativePath: 'artifacts/p1/checkpoint.mp4',
   }
+}
+
+function finalRenderRequest(expectedRevision) {
+  return {
+    kind: 'final_render',
+    operationId: '018f22d2-8d42-7c2a-a4cc-7a3f2c5f6b11',
+    projectId: 'p1',
+    expectedRevision,
+    renderProfile: structuredClone(FINAL_RENDER_PROFILE),
+    renderProfileSha256: FINAL_RENDER_PROFILE_SHA256,
+    approvalBindingSha256: `sha256:${'a'.repeat(64)}`,
+    outputRelativePath: 'artifacts/p1/final.mp4',
+  }
+}
+
+async function finalRenderHarness(root, { crashAt, mutateBeforeRender } = {}) {
+  const file = projectPath(root)
+  await fs.promises.mkdir(path.dirname(file), { recursive: true })
+  if (!fs.existsSync(file))
+    await atomicWriteFile(file, Buffer.from(`${JSON.stringify({ id: 'p1' }, null, 2)}\n`))
+  const loadProject = async () => {
+    const bytes = await fs.promises.readFile(file)
+    return { project: JSON.parse(bytes), revision: revisionOf(bytes) }
+  }
+  const req = finalRenderRequest((await loadProject()).revision)
+  const store = createCheckpointOperationStore({ workspace: root })
+  let renders = 0
+  const runner = createCheckpointOperationRunner({
+    store,
+    loadProject,
+    applyRecipe: async () => assert.fail('final render must not apply a recipe'),
+    commitProject: async () => assert.fail('final render must not commit a project'),
+    renderArtifact: async ({ tempPath, renderProfile }) => {
+      renders++
+      assert.deepEqual(renderProfile, FINAL_RENDER_PROFILE)
+      await mutateBeforeRender?.({ file, loadProject })
+      await fs.promises.writeFile(tempPath, 'fixed-final-render')
+      return {
+        mimeType: 'video/mp4',
+        mediaProbe: {
+          width: 1080,
+          height: 1920,
+          durationSeconds: 2,
+          fps: 30,
+          videoCodec: 'h264',
+          audioCodec: 'aac',
+        },
+      }
+    },
+    onBoundary: async (name) => {
+      if (name === crashAt) throw new CheckpointProcessCrash(name)
+    },
+  })
+  return { req, store, runner, loadProject, counts: () => ({ renders }) }
 }
 
 async function harness(root, { crashAt, syncArtifactDirectory } = {}) {
@@ -171,6 +226,150 @@ test('submission durably binds canonical request to operation ID and idempotency
   const concurrentlyUpdated = await store.get(OPERATION_ID)
   assert.equal(concurrentlyUpdated.phase, 'applying_recipe')
   assert.equal(concurrentlyUpdated.idempotencyKeyHashes.length, 3)
+})
+
+test('final render follows render-only durable phases and exact replay semantics', async (t) => {
+  const root = tempWorkspace()
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const setup = await finalRenderHarness(root)
+  const seen = []
+  const runner = createCheckpointOperationRunner({
+    store: setup.store,
+    loadProject: setup.loadProject,
+    applyRecipe: async () => assert.fail(),
+    commitProject: async () => assert.fail(),
+    renderArtifact: async ({ tempPath }) => {
+      await fs.promises.writeFile(tempPath, 'fixed-final-render')
+      return {
+        mimeType: 'video/mp4',
+        mediaProbe: {
+          width: 1080,
+          height: 1920,
+          durationSeconds: 2,
+          fps: 30,
+          videoCodec: 'h264',
+          audioCodec: 'aac',
+        },
+      }
+    },
+    onBoundary: async (name) => seen.push(name),
+  })
+  await setup.store.submit({ request: setup.req, idempotencyKey: 'final-key' })
+  assert.equal(
+    (await setup.store.submit({ request: setup.req, idempotencyKey: 'final-key' })).created,
+    false,
+  )
+  await assert.rejects(
+    () =>
+      setup.store.submit({
+        request: { ...setup.req, approvalBindingSha256: `sha256:${'b'.repeat(64)}` },
+        idempotencyKey: 'final-key',
+      }),
+    (error) => error.code === 'CHECKPOINT_IDEMPOTENCY_CONFLICT',
+  )
+  const operation = await runner.execute(setup.req.operationId)
+  assert.equal(operation.phase, 'succeeded')
+  assert.deepEqual(operation.artifact.mediaProbe, {
+    width: 1080,
+    height: 1920,
+    durationSeconds: 2,
+    fps: 30,
+    videoCodec: 'h264',
+    audioCodec: 'aac',
+  })
+  assert.deepEqual(
+    seen.filter((name) => name.startsWith('after_') && !name.includes('pending')),
+    [
+      'after_revision_verified',
+      'after_rendering',
+      'after_render',
+      'after_artifact_rename',
+      'after_artifact_committed',
+      'after_succeeded',
+    ],
+  )
+})
+
+test('final render re-verifies revision immediately before render and fails closed on probe mismatch', async (t) => {
+  await t.test('revision changed before renderer call', async (t) => {
+    const root = tempWorkspace()
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+    const setup = await finalRenderHarness(root, { crashAt: 'after_rendering' })
+    await setup.store.submit({ request: setup.req, idempotencyKey: 'revision-change' })
+    await assert.rejects(() => setup.runner.execute(setup.req.operationId), CheckpointProcessCrash)
+    await atomicWriteFile(
+      projectPath(root),
+      Buffer.from(`${JSON.stringify({ id: 'p1', changed: true })}\n`),
+    )
+    const recovered = await finalRenderHarness(root)
+    const operation = await recovered.runner.execute(setup.req.operationId)
+    assert.equal(operation.phase, 'failed')
+    assert.equal(operation.error.code, 'RENDER_REVISION_MISMATCH')
+    assert.equal(recovered.counts().renders, 0)
+  })
+
+  await t.test('fixed profile probe mismatch', async (t) => {
+    const root = tempWorkspace()
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+    const setup = await finalRenderHarness(root)
+    await setup.store.submit({ request: setup.req, idempotencyKey: 'probe-mismatch' })
+    const runner = createCheckpointOperationRunner({
+      store: setup.store,
+      loadProject: setup.loadProject,
+      applyRecipe: async () => assert.fail(),
+      commitProject: async () => assert.fail(),
+      renderArtifact: async ({ tempPath }) => {
+        await fs.promises.writeFile(tempPath, 'wrong-profile')
+        return {
+          mimeType: 'video/mp4',
+          mediaProbe: {
+            width: 1920,
+            height: 1080,
+            durationSeconds: 2,
+            fps: 30,
+            videoCodec: 'h264',
+            audioCodec: 'aac',
+          },
+        }
+      },
+    })
+    const operation = await runner.execute(setup.req.operationId)
+    assert.equal(operation.phase, 'failed')
+    assert.equal(operation.error.code, 'RENDER_PROFILE_MISMATCH')
+    assert.equal(fs.existsSync(path.join(root, setup.req.outputRelativePath)), false)
+  })
+})
+
+test('final render restart never promotes merely rendered or unbound files to success', async (t) => {
+  await t.test('crash after render reruns from durable evidence', async (t) => {
+    const root = tempWorkspace()
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+    const crashed = await finalRenderHarness(root, { crashAt: 'after_render' })
+    await crashed.store.submit({ request: crashed.req, idempotencyKey: 'render-crash' })
+    await assert.rejects(
+      () => crashed.runner.execute(crashed.req.operationId),
+      CheckpointProcessCrash,
+    )
+    assert.equal((await crashed.store.get(crashed.req.operationId)).phase, 'rendering')
+    const recovered = await finalRenderHarness(root)
+    const operation = await recovered.runner.execute(crashed.req.operationId)
+    assert.equal(operation.phase, 'succeeded')
+    assert.equal(crashed.counts().renders + recovered.counts().renders, 2)
+  })
+
+  await t.test('unbound final file is a collision', async (t) => {
+    const root = tempWorkspace()
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+    const setup = await finalRenderHarness(root)
+    await setup.store.submit({ request: setup.req, idempotencyKey: 'file-only' })
+    const finalPath = path.join(root, setup.req.outputRelativePath)
+    await fs.promises.mkdir(path.dirname(finalPath), { recursive: true })
+    await fs.promises.writeFile(finalPath, 'file-only')
+    const operation = await setup.runner.execute(setup.req.operationId)
+    assert.equal(operation.phase, 'failed')
+    assert.equal(operation.error.code, 'ARTIFACT_COLLISION')
+    assert.equal(setup.counts().renders, 0)
+  })
 })
 
 test('reconcile adopts the exact project receipt after a crash without double application', async (t) => {

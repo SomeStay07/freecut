@@ -324,13 +324,25 @@ async function main() {
         expectedRevision,
         receipt,
       }),
-    renderArtifact: async ({ project, recipe, tempPath }) => {
+    renderArtifact: async ({ project, recipe, renderProfile, tempPath }) => {
       for (const container of ['mp4', 'webm', 'mov', 'mkv', 'mp3', 'wav', 'm4a']) {
         await fs.promises.rm(outputPathForContainer(tempPath, container), { force: true })
       }
       const job = prepareJob(
         workspace,
-        { projectObject: projectForEngine(project), ...recipe.render, out: tempPath },
+        {
+          projectObject: projectForEngine(project),
+          ...(renderProfile
+            ? {
+                codec: renderProfile.codec,
+                container: renderProfile.container,
+                quality: renderProfile.quality,
+                resolution: `${renderProfile.width}x${renderProfile.height}`,
+                strict: true,
+              }
+            : recipe.render),
+          out: tempPath,
+        },
         mediaUrlOf,
       )
       assertHardwareGpuForJob(job, isSoftwareGpu(gpu))
@@ -350,7 +362,24 @@ async function main() {
       )
         ?.split(';', 1)[0]
         .trim()
-      return { mimeType }
+      return {
+        mimeType,
+        ...(renderProfile
+          ? {
+              mediaProbe: {
+                width: summary.effectiveSettings?.resolution?.width,
+                height: summary.effectiveSettings?.resolution?.height,
+                durationSeconds: summary.durationSeconds,
+                fps: summary.effectiveSettings?.fps,
+                videoCodec:
+                  summary.effectiveSettings?.codec === 'avc'
+                    ? 'h264'
+                    : summary.effectiveSettings?.codec,
+                audioCodec: summary.effectiveSettings?.audioCodec,
+              },
+            }
+          : {}),
+      }
     },
   })
 
@@ -399,7 +428,12 @@ async function main() {
       phase: record.phase,
       projectId: request.projectId,
       expectedRevision: request.expectedRevision,
-      recipeSha256: request.recipeSha256,
+      kind: request.kind ?? 'checkpoint',
+      ...(request.recipeSha256 ? { recipeSha256: request.recipeSha256 } : {}),
+      ...(request.renderProfileSha256 ? { renderProfileSha256: request.renderProfileSha256 } : {}),
+      ...(request.approvalBindingSha256
+        ? { approvalBindingSha256: request.approvalBindingSha256 }
+        : {}),
       requestSha256: record.requestSha256 ?? record.requestHash,
       ...(record.resultingRevision ? { resultingRevision: record.resultingRevision } : {}),
       ...(record.error ? { error: record.error } : {}),
@@ -415,7 +449,10 @@ async function main() {
     const submitted = await checkpointStore.submit({
       request,
       idempotencyKey: req.headers['idempotency-key'],
-      beforeCreate: () => assertCheckpointRecipeMedia(request.recipe),
+      beforeCreate: () =>
+        request.kind === 'final_render'
+          ? Promise.resolve()
+          : assertCheckpointRecipeMedia(request.recipe),
     })
     runCheckpointPump()
     if (!submitted.created) res.setHeader('Idempotency-Replayed', 'true')

@@ -3,7 +3,12 @@ import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { canonicalJsonBytes, qualifiedSha256 } from './lib/contract.mjs'
+import {
+  canonicalJsonBytes,
+  FINAL_RENDER_PROFILE,
+  FINAL_RENDER_PROFILE_SHA256,
+  qualifiedSha256,
+} from './lib/contract.mjs'
 
 const root = path.resolve(import.meta.dirname, '..')
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'freecut-lifecycle-e2e-'))
@@ -162,6 +167,45 @@ try {
   const checkpointArtifact = fs.readFileSync(path.join(workspace, checkpoint.artifact.relativePath))
   assert.equal(checkpoint.artifact.sha256, qualifiedSha256(checkpointArtifact))
   assert.equal(checkpoint.artifact.byteSize, checkpointArtifact.byteLength)
+
+  const finalRenderBody = {
+    kind: 'final_render',
+    operationId: '018f22d2-8d42-7c2a-a4cc-7a3f2c5f6b12',
+    projectId: 'demo',
+    expectedRevision: checkpoint.resultingRevision,
+    renderProfile: FINAL_RENDER_PROFILE,
+    renderProfileSha256: FINAL_RENDER_PROFILE_SHA256,
+    approvalBindingSha256: `sha256:${'a'.repeat(64)}`,
+    outputRelativePath: 'artifacts/demo/final.mp4',
+  }
+  const finalRenderOptions = {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'idempotency-key': 'final-render-demo' },
+    body: JSON.stringify(finalRenderBody),
+  }
+  const finalAccepted = await jsonRequest('/v1/checkpoint-operations', finalRenderOptions)
+  assert.equal(finalAccepted.body.operation.kind, 'final_render')
+  assert.equal(finalAccepted.body.operation.renderProfileSha256, FINAL_RENDER_PROFILE_SHA256)
+  assert.equal(
+    finalAccepted.body.operation.approvalBindingSha256,
+    finalRenderBody.approvalBindingSha256,
+  )
+  let finalRender
+  for (let attempt = 0; attempt < 320; attempt++) {
+    finalRender = (await jsonRequest(`/v1/checkpoint-operations/${finalRenderBody.operationId}`))
+      .body.operation
+    if (finalRender.state === 'succeeded' || finalRender.state === 'failed') break
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  assert.equal(finalRender?.state, 'succeeded', JSON.stringify(finalRender))
+  assert.equal(finalRender.artifact.mimeType, 'video/mp4')
+  assert.equal(finalRender.artifact.mediaProbe.width, 1080)
+  assert.equal(finalRender.artifact.mediaProbe.height, 1920)
+  assert.equal(finalRender.artifact.mediaProbe.videoCodec, 'h264')
+  assert.equal(finalRender.artifact.mediaProbe.audioCodec, 'aac')
+  const finalArtifact = fs.readFileSync(path.join(workspace, finalRender.artifact.relativePath))
+  assert.equal(finalRender.artifact.sha256, qualifiedSha256(finalArtifact))
+  assert.equal(finalRender.artifact.byteSize, finalArtifact.byteLength)
 
   const staleBody = {
     ...checkpointBody,

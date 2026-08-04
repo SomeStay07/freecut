@@ -860,7 +860,7 @@ export const CHECKPOINT_RECIPE_SCHEMA_SHA256 = qualifiedSha256(
   canonicalJsonBytes(checkpointRecipeJsonSchema),
 )
 
-export const checkpointOperationRequestSchema = z
+const checkpointLegacyOperationRequestSchema = z
   .object({
     operationId: uuidV7Schema,
     projectId: portableIdSchema,
@@ -878,6 +878,42 @@ export const checkpointOperationRequestSchema = z
         path: ['recipeSha256'],
       })
     }
+  })
+
+export const FINAL_RENDER_PROFILE = Object.freeze({
+  id: 'shorts-h264-high-v1',
+  codec: 'h264',
+  container: 'mp4',
+  quality: 'high',
+  width: 1080,
+  height: 1920,
+})
+export const FINAL_RENDER_PROFILE_SHA256 = qualifiedSha256(canonicalJsonBytes(FINAL_RENDER_PROFILE))
+
+const finalRenderOperationRequestSchema = z
+  .object({
+    kind: z.literal('final_render'),
+    operationId: uuidV7Schema,
+    projectId: portableIdSchema,
+    expectedRevision: revisionSchema,
+    renderProfile: z
+      .object({
+        id: z.literal(FINAL_RENDER_PROFILE.id),
+        codec: z.literal(FINAL_RENDER_PROFILE.codec),
+        container: z.literal(FINAL_RENDER_PROFILE.container),
+        quality: z.literal(FINAL_RENDER_PROFILE.quality),
+        width: z.literal(FINAL_RENDER_PROFILE.width),
+        height: z.literal(FINAL_RENDER_PROFILE.height),
+      })
+      .strict(),
+    renderProfileSha256: z.literal(FINAL_RENDER_PROFILE_SHA256),
+    approvalBindingSha256: revisionSchema,
+    outputRelativePath: z.string().min(1).max(1024),
+  })
+  .strict()
+
+const withPortableOutputPath = (schema) =>
+  schema.superRefine((value, ctx) => {
     const candidate = value.outputRelativePath
     const normalized = candidate.replace(/\\/g, '/')
     if (
@@ -895,6 +931,43 @@ export const checkpointOperationRequestSchema = z
       })
     }
   })
+
+const portableCheckpointLegacyOperationRequestSchema = withPortableOutputPath(
+  checkpointLegacyOperationRequestSchema,
+)
+const portableFinalRenderOperationRequestSchema = withPortableOutputPath(
+  finalRenderOperationRequestSchema,
+)
+
+export const checkpointOperationRequestSchema = z.union([
+  portableCheckpointLegacyOperationRequestSchema,
+  portableFinalRenderOperationRequestSchema,
+])
+
+const FINAL_RENDER_OPERATION_JSON_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    kind: { const: 'final_render' },
+    operationId: { type: 'string' },
+    projectId: { type: 'string' },
+    expectedRevision: { type: 'string' },
+    renderProfile: { const: FINAL_RENDER_PROFILE },
+    renderProfileSha256: { const: FINAL_RENDER_PROFILE_SHA256 },
+    approvalBindingSha256: { type: 'string' },
+    outputRelativePath: { type: 'string' },
+  },
+  required: [
+    'kind',
+    'operationId',
+    'projectId',
+    'expectedRevision',
+    'renderProfile',
+    'renderProfileSha256',
+    'approvalBindingSha256',
+    'outputRelativePath',
+  ],
+  additionalProperties: false,
+})
 
 export function normalizeRenderInput(value) {
   const out = { ...value }
@@ -950,13 +1023,29 @@ export function capabilities() {
       lifecycleEdit: z.toJSONSchema(lifecycleEditRequestSchema, { target: 'draft-7' }),
       mediaProbe: z.toJSONSchema(mediaProbeRequestSchema, { target: 'draft-7' }),
       mediaImport: z.toJSONSchema(mediaImportRequestSchema, { target: 'draft-7' }),
-      checkpointOperation: z.toJSONSchema(checkpointOperationRequestSchema, { target: 'draft-7' }),
+      checkpointOperation: z.toJSONSchema(portableCheckpointLegacyOperationRequestSchema, {
+        target: 'draft-7',
+      }),
+      finalRenderOperation: FINAL_RENDER_OPERATION_JSON_SCHEMA,
     },
     checkpointRecipe: {
       schemaVersion: CHECKPOINT_RECIPE_SCHEMA_VERSION,
       schemaSha256: CHECKPOINT_RECIPE_SCHEMA_SHA256,
       schema: checkpointRecipeJsonSchema,
       canonicalization: 'sorted-object-keys-json-utf8',
+    },
+    finalRender: {
+      kind: 'final_render',
+      renderProfileSha256: FINAL_RENDER_PROFILE_SHA256,
+      approvalBinding: 'sha256',
+      phases: [
+        'queued',
+        'revision_verified',
+        'rendering',
+        'artifact_committed',
+        'succeeded',
+        'failed',
+      ],
     },
     lifecycle: {
       routes: [
