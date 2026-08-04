@@ -245,7 +245,17 @@ test('capabilities advertise the canonical checkpoint recipe schema hash', () =>
     qualifiedSha256(canonicalJsonBytes(checkpointRecipeJsonSchema)),
   )
   assert.ok(result.lifecycle.routes.includes('POST /v1/checkpoint-operations'))
+  assert.equal(result.finalRender.kind, 'final_render')
+  assert.equal(result.finalRender.renderProfileSha256, FINAL_RENDER_PROFILE_SHA256)
   assert.equal(result.finalRender.approvalBinding, 'sha256')
+  assert.deepEqual(result.finalRender.phases, [
+    'queued',
+    'revision_verified',
+    'rendering',
+    'artifact_committed',
+    'succeeded',
+    'failed',
+  ])
   assert.deepEqual(result.finalRender.artifactMediaProbeKeys, [
     'width',
     'height',

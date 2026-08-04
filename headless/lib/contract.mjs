@@ -960,28 +960,13 @@ export const checkpointOperationRequestSchema = z.union([
 ])
 
 const FINAL_RENDER_OPERATION_JSON_SCHEMA = Object.freeze({
-  type: 'object',
   properties: {
     kind: { const: 'final_render' },
-    operationId: {},
-    projectId: {},
-    expectedRevision: {},
     renderProfile: { const: FINAL_RENDER_PROFILE },
     renderProfileSha256: { const: FINAL_RENDER_PROFILE_SHA256 },
     approvalBindingSha256: {},
-    outputRelativePath: {},
   },
-  required: [
-    'kind',
-    'operationId',
-    'projectId',
-    'expectedRevision',
-    'renderProfile',
-    'renderProfileSha256',
-    'approvalBindingSha256',
-    'outputRelativePath',
-  ],
-  additionalProperties: false,
+  required: ['kind', 'renderProfile', 'renderProfileSha256', 'approvalBindingSha256'],
 })
 
 export function normalizeRenderInput(value) {
@@ -1050,7 +1035,17 @@ export function capabilities() {
       canonicalization: 'sorted-object-keys-json-utf8',
     },
     finalRender: {
+      kind: 'final_render',
+      renderProfileSha256: FINAL_RENDER_PROFILE_SHA256,
       approvalBinding: 'sha256',
+      phases: [
+        'queued',
+        'revision_verified',
+        'rendering',
+        'artifact_committed',
+        'succeeded',
+        'failed',
+      ],
       artifactMediaProbeKeys: [
         'width',
         'height',
