@@ -537,6 +537,7 @@ export function useTimelineTrim(
 
         const rippleShift = handle === 'end' ? deltaFrames : -deltaFrames
         if (rippleShift !== 0 && synchronizedItems.length > 1) {
+          const allItemsById = new Map(allItems.map((item) => [item.id, item]))
           const synchronizedIds = new Set(synchronizedItems.map((linkedItem) => linkedItem.id))
           const oldById = new Map(
             synchronizedItems.map((linkedItem) => [linkedItem.id, linkedItem]),
@@ -571,16 +572,15 @@ export function useTimelineTrim(
               // which creates the temporary gap/ghost before mouseup snaps back.
               .filter(
                 (update) =>
-                  allItems.find((candidate) => candidate.id === update.id)?.trackId !==
-                  currentItem.trackId,
+                  allItemsById.get(update.id)?.trackId !== currentItem.trackId,
               )
-              .map((update) =>
-                applyMovePreview(
-                  allItems.find((candidate) => candidate.id === update.id)!,
-                  update.from -
-                    (allItems.find((candidate) => candidate.id === update.id)?.from ?? update.from),
-                ),
-              ),
+              .map((update) => {
+                const sourceItem = allItemsById.get(update.id)
+                return sourceItem
+                  ? applyMovePreview(sourceItem, update.from - sourceItem.from)
+                  : null
+              })
+              .filter((update): update is NonNullable<typeof update> => update !== null),
           )
         }
 

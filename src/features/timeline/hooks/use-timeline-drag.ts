@@ -1396,11 +1396,12 @@ export function useTimelineDrag(
           }
         } else {
           // Normal drag: Apply the snap to ALL items in the group
+          const currentItemsById = new Map(currentItems.map((item) => [item.id, item]))
           const allUpdates = movedItems.map((m) => ({
             id: m.id,
             from: Math.round(m.newFrom + groupSnapDelta),
             trackId:
-              m.newTrackId !== currentItems.find((i) => i.id === m.id)?.trackId
+              m.newTrackId !== currentItemsById.get(m.id)?.trackId
                 ? m.newTrackId
                 : undefined,
           }))

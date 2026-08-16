@@ -8,6 +8,7 @@ export interface ItemsIndexState {
   itemById: Record<string, TimelineItem>
   itemsByLinkedGroupId: Record<string, TimelineItem[]>
   linkedItemsByItemId: Record<string, TimelineItem[]>
+  captionIdsByClipId: Record<string, string[]>
   maxItemEndFrame: number
 }
 
@@ -252,6 +253,14 @@ function areItemArraysEqual(a: TimelineItem[] | undefined, b: TimelineItem[]): b
   return true
 }
 
+function areStringArraysEqual(a: string[] | undefined, b: string[]): boolean {
+  if (!a || a.length !== b.length) return false
+  for (let i = 0; i < b.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
 function buildItemsByTrackId(
   items: TimelineItem[],
   previous: Record<string, TimelineItem[]>,
@@ -483,6 +492,27 @@ function buildItemById(
   return next
 }
 
+function buildCaptionIdsByClipId(
+  items: TimelineItem[],
+  previous: Record<string, string[]>,
+): Record<string, string[]> {
+  const grouped: Record<string, string[]> = {}
+  for (const item of items) {
+    if (item.type !== 'text') continue
+    const clipId = item.captionSource?.clipId
+    if (clipId) {
+      ;(grouped[clipId] ??= []).push(item.id)
+    }
+  }
+
+  const next: Record<string, string[]> = {}
+  for (const [clipId, ids] of Object.entries(grouped)) {
+    const previousIds = previous[clipId]
+    next[clipId] = previousIds && areStringArraysEqual(previousIds, ids) ? previousIds : ids
+  }
+  return next
+}
+
 export function buildItemsMediaDependencyIds(items: TimelineItem[]): string[] {
   const mediaIds = new Set<string>()
   for (const item of items) {
@@ -510,7 +540,11 @@ export function withItemIndexes(
   items: TimelineItem[],
   previous: Pick<
     ItemsIndexState,
-    'itemsByTrackId' | 'itemById' | 'itemsByLinkedGroupId' | 'linkedItemsByItemId'
+    | 'itemsByTrackId'
+    | 'itemById'
+    | 'itemsByLinkedGroupId'
+    | 'linkedItemsByItemId'
+    | 'captionIdsByClipId'
   >,
 ): ItemsIndexState {
   const itemsByLinkedGroupId = buildItemsByLinkedGroupId(items, previous.itemsByLinkedGroupId)
@@ -524,6 +558,7 @@ export function withItemIndexes(
       itemsByLinkedGroupId,
       previous.linkedItemsByItemId,
     ),
+    captionIdsByClipId: buildCaptionIdsByClipId(items, previous.captionIdsByClipId),
     maxItemEndFrame: computeMaxItemEndFrame(items),
   }
 }

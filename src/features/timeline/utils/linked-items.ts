@@ -48,6 +48,17 @@ export function getLinkedItemIds(items: TimelineItem[], itemId: string): string[
 }
 
 export function getAttachedCaptionItemIds(items: TimelineItem[], itemId: string): string[] {
+  // Fast path: when the caller passes the live store array, use the precomputed
+  // caption index instead of a linear find+filter.
+  if (items === useItemsStore.getState().items) {
+    const storeState = useItemsStore.getState()
+    const anchor = storeState.itemById[itemId]
+    if (!anchor || anchor.type === 'text') {
+      return []
+    }
+    return storeState.captionIdsByClipId[itemId] ?? []
+  }
+
   const anchor = items.find((item) => item.id === itemId)
   if (!anchor || anchor.type === 'text') {
     return []

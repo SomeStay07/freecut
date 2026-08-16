@@ -60,6 +60,7 @@ interface ItemsState {
   itemById: Record<string, TimelineItem>
   itemsByLinkedGroupId: Record<string, TimelineItem[]>
   linkedItemsByItemId: Record<string, TimelineItem[]>
+  captionIdsByClipId: Record<string, string[]>
   maxItemEndFrame: number
   mediaDependencyIds: string[]
   mediaDependencyVersion: number
@@ -145,6 +146,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
   itemById: {},
   itemsByLinkedGroupId: {},
   linkedItemsByItemId: {},
+  captionIdsByClipId: {},
   maxItemEndFrame: 0,
   mediaDependencyIds: [],
   mediaDependencyVersion: 0,
