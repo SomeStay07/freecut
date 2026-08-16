@@ -235,7 +235,11 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
       if (itemsToDelete.length === 0) return state
 
       const remainingItems = state.items.filter((i) => !idsToDelete.has(i.id))
-      const shiftByItemId = buildRippleShiftByItemId(remainingItems, itemsToDelete)
+      const shiftByItemId = buildRippleShiftByItemId(
+        remainingItems,
+        itemsToDelete,
+        state.linkedItemsByItemId,
+      )
 
       const newItems = remainingItems.map((item) => {
         const shiftAmount = shiftByItemId.get(item.id) ?? 0

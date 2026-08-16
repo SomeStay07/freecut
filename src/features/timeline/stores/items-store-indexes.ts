@@ -1,6 +1,5 @@
 import type { AudioItem, TextItem, TimelineItem, VideoItem } from '@/types/timeline'
 import { getTextItemPlainText } from '@/shared/utils/text-item-spans'
-import { getLinkedItems } from '../utils/linked-items'
 import { useTransitionsStore } from './transitions-store'
 
 export interface ItemsIndexState {
@@ -546,6 +545,7 @@ export function getTransitionLinkedIds(itemId: string): Set<string> {
 export function buildRippleShiftByItemId(
   items: TimelineItem[],
   deletedItems: TimelineItem[],
+  linkedItemsByItemId: Record<string, TimelineItem[]> = {},
 ): Map<string, number> {
   const shiftByItemId = new Map<string, number>()
 
@@ -566,7 +566,9 @@ export function buildRippleShiftByItemId(
   for (const item of items) {
     if (visited.has(item.id)) continue
 
-    const linkedItems = getLinkedItems(items, item.id)
+    // Use the precomputed linked index (which also covers legacy pairs) instead
+    // of re-scanning the whole array with getLinkedItems per item (O(N²)).
+    const linkedItems = linkedItemsByItemId[item.id] ?? [item]
     for (const linkedItem of linkedItems) {
       visited.add(linkedItem.id)
     }

@@ -9,6 +9,7 @@ import { useItemsStore } from '../stores/items-store'
 import { useSelectionStore } from '@/shared/state/selection'
 import { pixelsToTimeNow } from '../utils/zoom-conversions'
 import { useSnapCalculator } from './use-snap-calculator'
+import { findNearestSnapTargetExcluding } from '../utils/timeline-snap-utils'
 import { setActiveSnapTargetIfChanged } from '../utils/snap-target-state'
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils'
 import { useTransitionsStore } from '../stores/transitions-store'
@@ -153,17 +154,12 @@ export function useTimelineTrim(
         return { snappedFrame: targetFrame, snapTarget: null }
       }
 
-      let nearestTarget: SnapTarget | null = null
-      let minDistance = getSnapThresholdFrames()
-
-      for (const target of targets) {
-        if (excludeItemIds && target.itemId && excludeItemIds.has(target.itemId)) continue
-        const distance = Math.abs(targetFrame - target.frame)
-        if (distance < minDistance) {
-          nearestTarget = target
-          minDistance = distance
-        }
-      }
+      const nearestTarget = findNearestSnapTargetExcluding(
+        targetFrame,
+        targets,
+        getSnapThresholdFrames(),
+        excludeItemIds,
+      )
 
       if (nearestTarget) {
         return { snappedFrame: nearestTarget.frame, snapTarget: nearestTarget }
