@@ -5,7 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-const DEFAULT_BASE_REF = 'origin/staging';
+// This fork tracks origin/develop, so that is what "changed code" means here.
+// Upstream compares against origin/staging; override with --base or
+// FALLOW_AUDIT_BASE when auditing against a different line.
+const DEFAULT_BASE_REF = 'origin/develop';
 const FALLOW_PACKAGE = 'fallow@2.89.0';
 
 function getBaseRef() {

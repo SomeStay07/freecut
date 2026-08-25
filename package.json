@@ -19,7 +19,7 @@
     "check:deps-wrapper-health": "node scripts/check-deps-wrapper-health.mjs --fail-on-unused",
     "check:unused-exports": "node scripts/check-fallow-unused-exports.mjs",
     "check:unused-class-members": "node scripts/check-fallow-unused-class-members.mjs",
-    "check:changed-health": "FALLOW_AUDIT_BASE=${FALLOW_AUDIT_BASE:-origin/develop} node scripts/check-fallow-changed-health.mjs",
+    "check:changed-health": "node scripts/check-fallow-changed-health.mjs",
     "report:deps-wrapper-health:json": "node scripts/check-deps-wrapper-health.mjs --json",
     "check:edge-budgets": "node scripts/check-feature-edge-budgets.mjs",
     "report:feature-edges": "node scripts/report-feature-edges.mjs",
