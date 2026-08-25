@@ -188,6 +188,11 @@ function dumpLayout(workspace, projectId, outDir) {
 
 const args = parseArgs(process.argv.slice(2))
 const label = args.label ?? 'snapshot'
+// outDir is deleted recursively below, and `--label ../..` would resolve to
+// .parity itself — wiping the frozen fixture the comparison depends on.
+if (!/^[A-Za-z0-9._-]+$/.test(String(label))) {
+  throw new Error(`--label must be a plain name (got "${label}")`)
+}
 const workspace = path.resolve(ROOT, args.workspace ?? path.join('.parity', 'ws'))
 const outDir = path.resolve(ROOT, args.out ?? path.join('.parity', `snap-${label}`))
 
@@ -200,6 +205,10 @@ buildWorkspace(workspace, { writeProjects: authoring })
 if (authoring) freezeProjects(workspace)
 else console.log(`Reusing frozen fixtures in ${path.relative(ROOT, workspace)}`)
 
+const parityRoot = path.resolve(ROOT, '.parity')
+if (outDir === parityRoot || !outDir.startsWith(`${parityRoot}${path.sep}`)) {
+  throw new Error(`--out must name a directory inside ${path.relative(ROOT, parityRoot)}/`)
+}
 fs.rmSync(outDir, { recursive: true, force: true })
 fs.mkdirSync(outDir, { recursive: true })
 

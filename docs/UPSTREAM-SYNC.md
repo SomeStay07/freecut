@@ -90,8 +90,8 @@ July 2026). This is the checklist for pulling upstream without breaking our engi
 
 ## After the sync
 
-- Re-run `node scripts/check-fallow-changed-health.mjs --base origin/main` to see
-  the new baseline.
+- Re-run `npm run check:changed-health` to see the new baseline (it defaults to
+  `origin/develop`; the retired line is not a valid base).
 - ~~The orchestrator test-coverage debt~~ **Closed 2026-07-27**: the frame loop
   now lives in `pipelined-frame-loop.ts` (real driver tests replaced the
   mock-echo), packet-remux eligibility in `packet-remux-plan.ts`, the subtitle

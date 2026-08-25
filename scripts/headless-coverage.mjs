@@ -10,6 +10,9 @@
 // writes `.coverage/headless.json` for `check:changed-health` to hand to Fallow.
 //
 // Run: npm run coverage:headless
+//      node scripts/headless-coverage.mjs --from <dir>   (convert an existing
+//      NODE_V8_COVERAGE directory instead of re-running the suite — CI already
+//      runs the suite once, and it is minutes long)
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -77,9 +80,21 @@ async function collect() {
   return { merged: map.toJSON(), processes }
 }
 
-fs.rmSync(COVERAGE_DIR, { recursive: true, force: true })
-fs.mkdirSync(V8_DIR, { recursive: true })
-runSuite()
+const fromIndex = process.argv.indexOf('--from')
+const reuseDir = fromIndex >= 0 ? path.resolve(process.argv[fromIndex + 1] ?? '') : null
+if (reuseDir) {
+  if (!fs.existsSync(reuseDir)) throw new Error(`--from directory not found: ${reuseDir}`)
+  if (reuseDir !== V8_DIR) {
+    fs.mkdirSync(V8_DIR, { recursive: true })
+    for (const entry of fs.readdirSync(reuseDir)) {
+      if (entry.endsWith('.json')) fs.copyFileSync(path.join(reuseDir, entry), path.join(V8_DIR, entry))
+    }
+  }
+} else {
+  fs.rmSync(COVERAGE_DIR, { recursive: true, force: true })
+  fs.mkdirSync(V8_DIR, { recursive: true })
+  runSuite()
+}
 
 const { merged, processes } = await collect()
 if (Object.keys(merged).length === 0) {

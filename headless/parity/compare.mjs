@@ -28,7 +28,11 @@ function readReport(dir) {
   return entries
 }
 
-/** Per-frame PSNR between two encodes of the same source. */
+/**
+ * Per-frame PSNR between two encodes of the same source. Throws rather than
+ * returning an empty list: this tool is the oracle for "did the engine move a
+ * pixel", so a silent ffmpeg failure must never read as "nothing differs".
+ */
 function framePsnr(fileA, fileB) {
   const result = spawnSync(
     'ffmpeg',
@@ -48,6 +52,12 @@ function framePsnr(fileA, fileB) {
     ],
     { encoding: 'utf8' },
   )
+  if (result.error) throw new Error(`ffmpeg could not be run: ${result.error.message}`)
+  if (result.status !== 0) {
+    throw new Error(
+      `ffmpeg psnr failed (exit ${result.status}) for ${fileA} vs ${fileB}\n${result.stderr ?? ''}`,
+    )
+  }
   const rows = []
   for (const line of (result.stdout ?? '').split('\n')) {
     const frame = /\bn:(\d+)\b/.exec(line)
@@ -77,7 +87,10 @@ for (const key of keys) {
   const [, project, variant] = videoMatch
   const fileA = path.join(dirA, `${project}.${variant}.mp4`)
   const fileB = path.join(dirB, `${project}.${variant}.mp4`)
-  if (!fs.existsSync(fileA) || !fs.existsSync(fileB)) continue
+  if (!fs.existsSync(fileA) || !fs.existsSync(fileB)) {
+    console.log('   (cannot localise: one of the rendered files is missing from the snapshot)')
+    continue
+  }
   const rows = framePsnr(fileA, fileB)
   const visual = rows.filter((row) => row.psnr < 45)
   const propagation = rows.filter((row) => row.psnr >= 45)
