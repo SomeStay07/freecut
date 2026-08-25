@@ -32,6 +32,7 @@ import { useItemsStore } from '@/features/timeline/stores/items-store'
 import { useTransitionsStore } from '@/features/timeline/stores/transitions-store'
 import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store'
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store'
+import { useEditorStore } from '@/shared/state/editor'
 import { createClassicTrack } from '@/features/timeline/utils/classic-tracks'
 import { seedMediaLibrary } from './seed-media'
 import {
@@ -638,6 +639,27 @@ function applyOp(op: EditOp): unknown {
   }
 }
 
+const LINKED_SENSITIVE_OPERATIONS = new Set<EditOperationName>([
+  'removeItems',
+  'split',
+  'trimStart',
+  'trimEnd',
+])
+
+function applyOpWithLinkedOverride(op: EditOp): unknown {
+  if (!LINKED_SENSITIVE_OPERATIONS.has(op.op) || typeof op.linked !== 'boolean') {
+    return applyOp(op)
+  }
+
+  const previous = useEditorStore.getState().linkedSelectionEnabled
+  useEditorStore.getState().setLinkedSelectionEnabled(op.linked)
+  try {
+    return applyOp(op)
+  } finally {
+    useEditorStore.getState().setLinkedSelectionEnabled(previous)
+  }
+}
+
 /** Apply one op, record its result (success or failure), and rethrow on failure. */
 function applyOpTracked(
   rawOp: EditOp,
@@ -647,7 +669,7 @@ function applyOpTracked(
   const callerId = asString(rawOp.callerId)
   const op = resolveOperationRefs(rawOp, prior)
   try {
-    const detail = applyOp(op)
+    const detail = applyOpWithLinkedOverride(op)
     const result = { ...(callerId ? { callerId } : {}), op: op.op, ok: true as const, detail }
     results.push(result)
     if (callerId) prior.set(callerId, result)
