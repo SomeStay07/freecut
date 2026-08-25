@@ -18,6 +18,11 @@ July 2026). This is the checklist for pulling upstream without breaking our engi
 - Merge our own `fork/develop` BEFORE `origin/develop`, so parallel headless work
   is reconciled while the upstream delta is still out of the picture.
 - Never run the sync while a headless render is in flight (shared dist/).
+- This fork replaced the legacy agent-support directory with `.agents/`; upstream
+  still maintains theirs. A sync can therefore reintroduce it as a new directory.
+  `npm run check:codex-contract` fails when that happens — port the change into
+  the matching `.agents/` file and delete the reintroduced copy, rather than
+  carrying two divergent copies.
 - Local Node is 26.x, CI is Node 22: `npm run test:run` needs
   `NODE_OPTIONS="--localstorage-file=<path>"` or ~570 DOM tests fail on an
   environment quirk, not on code.
@@ -69,19 +74,13 @@ July 2026). This is the checklist for pulling upstream without breaking our engi
 2. `npm run test:run` — full suite; the only allowed failure is the known
    platform-dependent `hotkey-editor-search` (Cmd vs Ctrl on macOS).
 3. `npm run build && npm run headless:test:portable` — node contracts + chrome e2e + media.
-4. **Render-parity bench (the check that actually catches engine drift).** Build a
-   frozen fixture workspace and render it on BOTH sides — check out the pre-sync commit,
-   `npm ci` (so the old dependency versions come back), `npm run build`, render, then
-   return. Compare: golden-frame md5s, per-frame `ffmpeg -f framemd5` digests, decoded
-   PCM md5 of the audio, `astats`, and `ffprobe` stream summaries. Take TWO snapshots on
-   the same code first to prove the pipeline is bit-deterministic, otherwise a diff means
-   nothing. Cover the paths upstream touches: batched GPU colour effects, two different
-   transition presets, a non-integer-fps source, an alpha mask, inline text spans,
-   a pre-composition, ducking — rendered full, at `--resolution` (logical-canvas path),
-   as a windowed slice (`--in/--duration`), and `--audio-only`. Localise every difference
-   with per-frame PSNR before calling it a regression: an encoder GOP tail reads ~63 dB,
-   a real change reads under ~35 dB. Add a positive control for anything that could be
-   "identically broken" (e.g. render a ducking-free copy and confirm the mix is louder).
+4. **Render-parity bench (the check that actually catches engine drift):**
+   `headless/parity/` — see its README. Render the frozen fixture on BOTH sides — check out the pre-sync commit,
+   `npm ci` (so the old dependency versions come back), `npm run build`, then
+   `node headless/parity/snapshot.mjs --label before`; repeat as `--label after` on the new
+   code and diff with `headless/parity/compare.mjs`. Take TWO snapshots on the same code
+   first: they must be identical, or no later diff means anything. `.parity/ws` is written
+   once and reused — never regenerate it between the two sides.
 5. **App smoke**: `npm run preview:perf`, then load `/`, `/projects`, `/changelog`,
    `/docs`, `/editor` in headless Chrome and require zero console errors.
 6. `git diff --stat` review: no unexplained deletions in `src/headless/`, `headless/`.

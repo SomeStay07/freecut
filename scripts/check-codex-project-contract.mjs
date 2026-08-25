@@ -123,6 +123,13 @@ for (const file of activeSurfaces.flatMap(contractFiles)) {
 
 if (failures.length) {
   console.error(`Codex project contract: FAIL\n- ${failures.join('\n- ')}`)
+  if (failures.some((failure) => failure.includes('compatibility path'))) {
+    console.error(
+      '\nUpstream still maintains the legacy agent-support directory this fork removed, so a' +
+        '\nsync can resurrect it. Port whatever changed into the matching .agents/ file, delete' +
+        '\nthe reintroduced copy, and keep the merge commit — do not simply re-delete it blind.',
+    )
+  }
   process.exit(1)
 }
 console.log('Codex project contract: PASS')

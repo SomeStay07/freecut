@@ -6,7 +6,9 @@
     "src/test/setup.ts",
     "headless/probe.mjs",
     "headless/smoke.mjs",
-    "headless/media-smoke.mjs"
+    "headless/media-smoke.mjs",
+    "headless/parity/snapshot.mjs",
+    "headless/parity/compare.mjs"
   ],
   "ignorePatterns": [
     // Static reachability cannot see URL-loaded assets such as /sw.js
@@ -40,6 +42,7 @@
       "scripts/check-fallow-*.mjs",
       "scripts/headless-coverage.mjs",
       "headless/test.mjs",
+      "headless/parity/**",
       "src/runtime/composition-runtime/components/item-content.tsx",
       "src/features/preview/components/video-preview.tsx",
       "src/features/preview/components/color-scopes-view.tsx",

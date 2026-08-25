@@ -103,3 +103,6 @@ artifacts/
 
 # Headless coverage feed for the Fallow changed-health gate (npm run coverage:headless)
 .coverage/
+
+# Render-parity bench workspace and snapshots (headless/parity)
+.parity/
