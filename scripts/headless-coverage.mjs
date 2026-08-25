@@ -28,6 +28,8 @@ function runSuite() {
     cwd: ROOT,
     stdio: 'inherit',
     env: { ...process.env, NODE_V8_COVERAGE: V8_DIR },
+    // npm is a .cmd shim on Windows, which spawnSync cannot exec directly.
+    shell: process.platform === 'win32',
   })
   if (result.status !== 0) {
     throw new Error(`headless:test:portable exited with ${result.status}`)
