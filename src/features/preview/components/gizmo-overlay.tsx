@@ -64,6 +64,10 @@ import {
   resolveEditableGizmoTransform,
   resolveGizmoCommitParentWorld,
 } from '../utils/gizmo-transform-commit'
+import {
+  buildGroupTextScaleCommit,
+  type GroupScaledTextProperties,
+} from '../utils/group-text-scale'
 import { CROP_EDGE_PROPERTY, type CropEdge } from '../utils/crop-gizmo'
 import {
   MARQUEE_CANDIDATE_ATTRIBUTE,
@@ -262,7 +266,11 @@ export function GizmoOverlay({
   useEffect(() => {
     if (!isPlaying) {
       // When paused/skimming, sync to the effective preview frame
-      frozenFrameRef.current = getResolvedFrameForPlaybackState(usePlaybackStore.getState())
+      const nextFrame = getResolvedFrameForPlaybackState(usePlaybackStore.getState())
+      if (frozenFrameRef.current !== nextFrame) {
+        frozenFrameRef.current = nextFrame
+        setForceUpdate((n) => n + 1)
+      }
     }
   }, [getResolvedFrameForPlaybackState, isPlaying])
 
@@ -809,6 +817,7 @@ export function GizmoOverlay({
     visibleItems,
     projectSize,
     itemsWithLiveTransforms,
+    frozenFrameRef.current,
   )
 
   // Create marquee items with pre-computed bounding rects for collision detection
@@ -1058,11 +1067,16 @@ export function GizmoOverlay({
 
   // Handle group transform end - commit transforms for all items as a single undo operation
   const handleGroupTransformEnd = useCallback(
-    (transforms: Map<string, Transform>, operation: 'move' | 'resize' | 'rotate') => {
+    (
+      transforms: Map<string, Transform>,
+      operation: 'move' | 'resize' | 'rotate',
+      textUpdates?: ReadonlyMap<string, GroupScaledTextProperties>,
+    ) => {
       const currentFrame = usePlaybackStore.getState().currentFrame
       // Convert Transform to TransformProperties for the batch update
       const transformsMap = new Map<string, Partial<TransformProperties>>()
       const autoKeyframeOperations: AutoKeyframeOperation[] = []
+      const itemUpdates = new Map<string, Partial<TimelineItem>>()
       const itemsById = new Map(visualItems.map((candidate) => [candidate.id, candidate]))
       for (const [itemId, transform] of transforms) {
         const item = visualItems.find((candidate) => candidate.id === itemId)
@@ -1100,9 +1114,34 @@ export function GizmoOverlay({
         })
         autoKeyframeOperations.push(...commit.autoOps)
         if (commit.shouldUpdateBase) transformsMap.set(itemId, commit.transformProps)
+
+        const textUpdate = textUpdates?.get(itemId)
+        if (item.type === 'text' && textUpdate) {
+          const hasFrameScopedScale = commit.autoOps.some(
+            (autoOperation) =>
+              autoOperation.property === 'scale' ||
+              autoOperation.property === 'width' ||
+              autoOperation.property === 'height',
+          )
+          const textCommit = buildGroupTextScaleCommit(
+            item,
+            useKeyframesStore.getState().keyframesByItemId[itemId],
+            textUpdate,
+            currentFrame,
+            hasFrameScopedScale,
+          )
+          autoKeyframeOperations.push(...textCommit.autoKeyframeOperations)
+          if (Object.keys(textCommit.itemUpdates).length > 0) {
+            itemUpdates.set(itemId, textCommit.itemUpdates)
+          }
+        }
       }
       // Use batch update for single undo operation
-      updateItemsTransformMap(transformsMap, { operation, autoKeyframeOperations })
+      updateItemsTransformMap(transformsMap, {
+        operation,
+        autoKeyframeOperations,
+        itemUpdates,
+      })
 
       // Prevent background click from deselecting after drag
       // Use setTimeout instead of requestAnimationFrame because click events
@@ -1450,7 +1489,8 @@ export function GizmoOverlay({
           })}
 
         {/* Transform gizmo(s) for selected items - hidden while another canvas editor is active */}
-        {isExclusiveCanvasEditorActive ? null : selectedItems.length === 1 && selectedItems[0] ? (
+        {isExclusiveCanvasEditorActive || isPlaying ? null : selectedItems.length === 1 &&
+          selectedItems[0] ? (
           <TransformGizmo
             item={selectedItems[0]}
             coordParams={coordParams}

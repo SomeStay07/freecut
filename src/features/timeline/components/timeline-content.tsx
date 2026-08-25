@@ -72,8 +72,8 @@ import { applyTimelineLiveGeometry } from '../utils/timeline-live-geometry'
 import { resolveTimelineMarqueeItems } from '../utils/timeline-marquee-geometry'
 import { setTimelineDensityMarqueePreview } from '../utils/timeline-density-marquee-preview'
 import { notifyTimelineLiveScroll } from '@/shared/timeline/live-scroll-sync'
-import { getPlaybackFollowScrollLeft } from '../utils/playback-follow-scroll'
 import { TimelineSettledContentZoomProvider } from './timeline-settled-content-zoom-provider'
+import { getTimelineZoomInteractionShieldBounds } from '../utils/timeline-zoom-interaction-shield'
 
 const ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES = [
   'timeline-cursor-trim-left',
@@ -397,6 +397,7 @@ interface TimelineMarqueeLayerProps {
   onSelectionChange: (ids: string[]) => void
   onMarqueeActiveChange: (active: boolean) => void
   onMarqueeGestureEnd: (event: MouseEvent) => void
+  onMarqueeGestureCancel: () => void
 }
 
 const TimelineMarqueeLayer = memo(function TimelineMarqueeLayer({
@@ -407,6 +408,7 @@ const TimelineMarqueeLayer = memo(function TimelineMarqueeLayer({
   onSelectionChange,
   onMarqueeActiveChange,
   onMarqueeGestureEnd,
+  onMarqueeGestureCancel,
 }: TimelineMarqueeLayerProps) {
   const previewItemIdsRef = useRef<string[]>([])
 
@@ -491,6 +493,7 @@ const TimelineMarqueeLayer = memo(function TimelineMarqueeLayer({
     onSelectionChange,
     onPreviewSelectionChange: setPreviewItemIds,
     onGestureEnd: onMarqueeGestureEnd,
+    onGestureCancel: onMarqueeGestureCancel,
     enabled: itemIds.length > 0,
     threshold: 5,
     commitSelectionOnMouseUp: true,
@@ -902,6 +905,10 @@ export const TimelineContent = memo(function TimelineContent({
   // scheduleViewportSync can hand it to syncViewportFromContainer instead of
   // reading container.scrollLeft back (a forced reflow after a width write).
   const scrollLeftRef = useRef(0)
+  // The rendered content width is derived below and changes only with content,
+  // viewport size, or settled zoom. Keep it available to playback follow-scroll
+  // without reading container.scrollWidth on every clock frame.
+  const timelineWidthRef = useRef(0)
 
   // Cached viewport box dimensions. clientWidth/clientHeight are invariant under
   // scroll and horizontal zoom (only the *content* width changes), so reading
@@ -951,39 +958,6 @@ export const TimelineContent = memo(function TimelineContent({
       // so the sync skips a container.scrollLeft read-back, which would force a
       // synchronous reflow when a zoom width write landed the same frame.
       withPerfMeasure('tl.raf.viewportSync', () => syncViewportFromContainer(scrollLeftRef.current))
-    })
-  }, [syncViewportFromContainer])
-
-  // DaVinci-style page following: let the playhead travel naturally across the
-  // viewport, then move the native timeline (and therefore the navigator thumb)
-  // only when playback reaches an edge. This stays imperative so playback does
-  // not re-render the timeline tree on every frame.
-  useEffect(() => {
-    return usePlaybackStore.subscribe((state, previousState) => {
-      if (!state.isPlaying || state.currentFrame === previousState.currentFrame) {
-        return
-      }
-
-      const container = containerRef.current
-      if (!container) return
-
-      const cachedViewportWidth = viewportDimsRef.current?.width ?? 0
-      const viewportWidth = cachedViewportWidth > 0 ? cachedViewportWidth : container.clientWidth
-      const maxScrollLeft = Math.max(0, container.scrollWidth - viewportWidth)
-      const nextScrollLeft = getPlaybackFollowScrollLeft({
-        playheadX: frameToPixelsRef.current(state.currentFrame),
-        scrollLeft: container.scrollLeft,
-        viewportWidth,
-        maxScrollLeft,
-        playbackDirection: state.playbackRate < 0 ? -1 : 1,
-      })
-      if (nextScrollLeft === null) return
-
-      velocityXRef.current = 0
-      container.scrollLeft = nextScrollLeft
-      scrollLeftRef.current = nextScrollLeft
-      syncViewportFromContainer(nextScrollLeft, true)
-      notifyTimelineLiveScroll(container)
     })
   }, [syncViewportFromContainer])
 
@@ -1410,6 +1384,20 @@ export const TimelineContent = memo(function TimelineContent({
     }
   }, [])
 
+  const cancelMarqueePointerGesture = useCallback(() => {
+    const wasMarqueePointerGesture = marqueePointerDownRef.current
+    marqueePointerDownRef.current = false
+    marqueeStartPreviewFrameRef.current = null
+    marqueeReleasePreviewRef.current = null
+
+    if (!wasMarqueePointerGesture) return
+    if (marqueeReleaseRafRef.current !== null) {
+      cancelAnimationFrame(marqueeReleaseRafRef.current)
+      marqueeReleaseRafRef.current = null
+    }
+    setPreviewFrameRef.current(null)
+  }, [])
+
   useEffect(
     () => () => {
       if (marqueeReleaseRafRef.current !== null) {
@@ -1567,6 +1555,7 @@ export const TimelineContent = memo(function TimelineContent({
   }, [furthestItemEndFrame, fps, containerWidth])
 
   actualDurationRef.current = actualDuration
+  timelineWidthRef.current = timelineWidth
 
   useLayoutEffect(() => {
     const container = containerRef.current
@@ -1913,18 +1902,34 @@ export const TimelineContent = memo(function TimelineContent({
 
     const cached = viewportDimsRef.current
     const rect = cached ? null : container.getBoundingClientRect()
-    shield.style.left = `${cached?.left ?? rect?.left ?? 0}px`
-    shield.style.top = `${cached?.top ?? rect?.top ?? 0}px`
-    shield.style.width = `${cached?.width ?? rect?.width ?? container.clientWidth}px`
-    shield.style.height = `${cached?.fullHeight ?? rect?.height ?? container.clientHeight}px`
+    const shieldBounds = getTimelineZoomInteractionShieldBounds({
+      left: cached?.left ?? rect?.left ?? 0,
+      top: cached?.top ?? rect?.top ?? 0,
+      width: cached?.width ?? rect?.width ?? container.clientWidth,
+      height: cached?.fullHeight ?? rect?.height ?? container.clientHeight,
+    })
+    shield.style.left = `${shieldBounds.left}px`
+    // Keep the ruler interactive while content geometry settles. A ruler press
+    // owns transport immediately and must never land on this track-only shield.
+    shield.style.top = `${shieldBounds.top}px`
+    shield.style.width = `${shieldBounds.width}px`
+    shield.style.height = `${shieldBounds.height}px`
     shield.style.display = 'block'
   }, [])
 
   useEffect(() => {
+    const hideShieldIfSettled = (isZoomInteracting: boolean) => {
+      if (isZoomInteracting) return
+      const shield = zoomInteractionShieldRef.current
+      if (shield) shield.style.display = 'none'
+    }
+
+    // HMR or a remount can preserve an imperative `display: block` write after
+    // the zoom store has already settled. Reconcile the DOM immediately.
+    hideShieldIfSettled(useZoomStore.getState().isZoomInteracting)
     return useZoomStore.subscribe((state, previousState) => {
       if (!state.isZoomInteracting && previousState.isZoomInteracting) {
-        const shield = zoomInteractionShieldRef.current
-        if (shield) shield.style.display = 'none'
+        hideShieldIfSettled(state.isZoomInteracting)
       }
     })
   }, [])
@@ -2109,6 +2114,7 @@ export const TimelineContent = memo(function TimelineContent({
         <div
           ref={zoomInteractionShieldRef}
           data-timeline-zoom-interaction-shield
+          data-marquee-ignore
           aria-hidden="true"
           className="fixed z-50"
           style={{ display: 'none' }}
@@ -2122,6 +2128,7 @@ export const TimelineContent = memo(function TimelineContent({
           onSelectionChange={handleMarqueeSelectionChange}
           onMarqueeActiveChange={handleMarqueeActiveChange}
           onMarqueeGestureEnd={finishMarqueePointerGesture}
+          onMarqueeGestureCancel={cancelMarqueePointerGesture}
         />
 
         {itemIds.length === 0 && (

@@ -60,6 +60,7 @@ interface ItemsState {
   itemById: Record<string, TimelineItem>
   itemsByLinkedGroupId: Record<string, TimelineItem[]>
   linkedItemsByItemId: Record<string, TimelineItem[]>
+  captionIdsByClipId: Record<string, string[]>
   maxItemEndFrame: number
   mediaDependencyIds: string[]
   mediaDependencyVersion: number
@@ -103,7 +104,10 @@ interface ItemsActions {
   _updateItemTransform: (id: string, transform: Partial<TransformProperties>) => void
   _resetItemTransform: (id: string) => void
   _updateItemsTransform: (ids: string[], transform: Partial<TransformProperties>) => void
-  _updateItemsTransformMap: (transformsMap: Map<string, Partial<TransformProperties>>) => void
+  _updateItemsTransformMap: (
+    transformsMap: Map<string, Partial<TransformProperties>>,
+    itemUpdates?: ReadonlyMap<string, Partial<TimelineItem>>,
+  ) => void
 
   // Effect operations
   _addEffect: (itemId: string, effect: VisualEffect) => void
@@ -142,6 +146,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
   itemById: {},
   itemsByLinkedGroupId: {},
   linkedItemsByItemId: {},
+  captionIdsByClipId: {},
   maxItemEndFrame: 0,
   mediaDependencyIds: [],
   mediaDependencyVersion: 0,
@@ -232,7 +237,11 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
       if (itemsToDelete.length === 0) return state
 
       const remainingItems = state.items.filter((i) => !idsToDelete.has(i.id))
-      const shiftByItemId = buildRippleShiftByItemId(remainingItems, itemsToDelete)
+      const shiftByItemId = buildRippleShiftByItemId(
+        remainingItems,
+        itemsToDelete,
+        state.linkedItemsByItemId,
+      )
 
       const newItems = remainingItems.map((item) => {
         const shiftAmount = shiftByItemId.get(item.id) ?? 0
@@ -781,17 +790,22 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
     }),
 
   // Update transforms from map
-  _updateItemsTransformMap: (transformsMap) =>
+  _updateItemsTransformMap: (transformsMap, itemUpdates) =>
     set((state) => {
       const nextItems = state.items.map((item) => {
         const transform = transformsMap.get(item.id)
-        if (!transform) return item
-        if (!('transform' in item)) return item
+        const updates = itemUpdates?.get(item.id)
+        if (!transform && !updates) return item
 
-        return {
-          ...item,
+        const updatedItem = updates
+          ? normalizeFrameFields({ ...item, ...normalizeItemUpdates(updates) } as typeof item)
+          : item
+        if (!transform || !('transform' in item)) return updatedItem
+
+        return normalizeFrameFields({
+          ...updatedItem,
           transform: { ...item.transform, ...transform },
-        } as typeof item
+        } as typeof item)
       })
       return withItemIndexes(nextItems, state)
     }),
