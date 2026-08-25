@@ -44,8 +44,18 @@ function getNpmExecPath() {
   return fs.existsSync(bundledNpmPath) ? bundledNpmPath : '';
 }
 
+// Headless drivers run under `node --test`, so Vitest coverage never sees them
+// and every headless function scores as uncovered in CRAP. `npm run
+// coverage:headless` writes this file; when it is present we hand it to Fallow
+// so complexity findings reflect real coverage instead of an assumed zero.
+const HEADLESS_COVERAGE_PATH = path.join(process.cwd(), '.coverage', 'headless.json');
+
+function coverageArgs() {
+  return fs.existsSync(HEADLESS_COVERAGE_PATH) ? ['--coverage', HEADLESS_COVERAGE_PATH] : [];
+}
+
 function createFallowCommand(baseRef) {
-  const fallowArgs = ['audit', '--format', 'json', '--quiet', '--base', baseRef];
+  const fallowArgs = ['audit', '--format', 'json', '--quiet', '--base', baseRef, ...coverageArgs()];
   const npmExecPath = getNpmExecPath();
   if (npmExecPath) {
     return {

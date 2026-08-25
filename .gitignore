@@ -99,3 +99,6 @@ ds-bundle/
 
 artifacts/
 .playwright-cli/
+
+# Headless coverage feed for the Fallow changed-health gate
+.coverage/
