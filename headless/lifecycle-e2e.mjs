@@ -330,10 +330,12 @@ try {
   const renderedRequest = fetch(`http://127.0.0.1:${port}/v1/render`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ project: 'demo', duration: 1, codec: 'vp9' }),
+    // Long enough that the /v1/status poll below reliably lands inside the
+    // render window; a 1-second render can finish between two polls.
+    body: JSON.stringify({ project: 'demo', duration: 3, codec: 'vp9' }),
   })
   let observedOperation
-  for (let attempt = 0; attempt < 80; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     const currentStatus = (await jsonRequest('/v1/status')).body
     if (
       currentStatus.activeOperation?.kind === 'render' &&
@@ -353,7 +355,7 @@ try {
       }
       break
     }
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await new Promise((resolve) => setTimeout(resolve, 10))
   }
   const renderedResponse = await renderedRequest
   assert.equal(renderedResponse.status, 200)
