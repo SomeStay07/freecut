@@ -189,7 +189,7 @@ async function stageImport(workspace, body, requestHash) {
 
 async function associateProject(workspace, projectId, mediaId) {
   if (!projectId) return
-  await withResourceLock(`project:${projectId}:media-links`, async () => {
+  const linkProjectMedia = async () => {
     await getProjectResource(workspace, projectId)
     const linksFile = resolveContained(
       path.join(workspace, 'projects'),
@@ -208,7 +208,8 @@ async function associateProject(workspace, projectId, mediaId) {
       links.mediaIds.push({ id: mediaId, addedAt: Date.now() })
       await atomicWriteFile(linksFile, Buffer.from(`${JSON.stringify(links, null, 2)}\n`))
     }
-  })
+  }
+  await withResourceLock(`project:${projectId}:media-links`, linkProjectMedia)
 }
 
 async function syncDirectory(directory) {
@@ -313,7 +314,8 @@ export async function importWorkspaceMedia(
       'FreeCut workspace identity unavailable',
     )
   if (body.projectId) await getProjectResource(workspace, body.projectId)
-  return withResourceLock(`media:${body.mediaId}`, async () => {
+  /** Whole import runs under the media lock: stage, promote, associate. */
+  const importUnderLock = async () => {
     let existing
     try {
       existing = await getMediaResource(workspace, body.mediaId)
@@ -340,40 +342,7 @@ export async function importWorkspaceMedia(
     try {
       unregister = registerTransient(body.mediaId, staged.target)
       const probeResult = await probe(staged)
-      const importProbe = normalizeProbe(probeResult)
-      const details = probeResult.metadata ?? probeResult
-      const now = Date.now()
-      const metadata = {
-        id: body.mediaId,
-        storageType: 'workspace',
-        fileName: staged.fileName,
-        fileSize: staged.fileSize,
-        fileLastModified: staged.fileLastModified,
-        mimeType: probeResult.mimeType ?? staged.mimeType,
-        sourceSha256: staged.sourceSha256,
-        sourceRelativePath: staged.sourceRelativePath,
-        importProbe,
-        duration: details.duration ?? 0,
-        width: details.width ?? 0,
-        height: details.height ?? 0,
-        fps: details.type === 'video' ? (details.fps ?? 0) : 0,
-        codec: details.codec ?? 'unknown',
-        bitrate: details.bitrate ?? 0,
-        ...('audioCodec' in details ? { audioCodec: details.audioCodec } : {}),
-        ...('audioCodecSupported' in details
-          ? { audioCodecSupported: details.audioCodecSupported }
-          : {}),
-        ...('videoCodecSupported' in details
-          ? { videoCodecSupported: details.videoCodecSupported }
-          : {}),
-        ...('keyframeTimestamps' in details
-          ? { keyframeTimestamps: details.keyframeTimestamps }
-          : {}),
-        ...('gopInterval' in details ? { gopInterval: details.gopInterval } : {}),
-        tags: [],
-        createdAt: now,
-        updatedAt: now,
-      }
+      const metadata = buildImportedMetadata(body, staged, probeResult)
       await atomicWriteFile(
         path.join(staged.resourceDir, 'metadata.json'),
         Buffer.from(`${JSON.stringify(metadata, null, 2)}\n`),
@@ -406,58 +375,120 @@ export async function importWorkspaceMedia(
       unregister()
       await fs.promises.rm(staged.root, { recursive: true, force: true }).catch(() => {})
     }
-  })
+  }
+  return withResourceLock(`media:${body.mediaId}`, importUnderLock)
+}
+
+/** Optional probe fields are copied through only when the probe actually reported them. */
+const OPTIONAL_PROBE_FIELDS = [
+  'audioCodec',
+  'audioCodecSupported',
+  'videoCodecSupported',
+  'keyframeTimestamps',
+  'gopInterval',
+]
+
+function buildImportedMetadata(body, staged, probeResult) {
+  const details = probeResult.metadata ?? probeResult
+  const now = Date.now()
+  const optional = {}
+  for (const field of OPTIONAL_PROBE_FIELDS) {
+    if (field in details) optional[field] = details[field]
+  }
+  return {
+    id: body.mediaId,
+    storageType: 'workspace',
+    fileName: staged.fileName,
+    fileSize: staged.fileSize,
+    fileLastModified: staged.fileLastModified,
+    mimeType: probeResult.mimeType ?? staged.mimeType,
+    sourceSha256: staged.sourceSha256,
+    sourceRelativePath: staged.sourceRelativePath,
+    importProbe: normalizeProbe(probeResult),
+    duration: details.duration ?? 0,
+    width: details.width ?? 0,
+    height: details.height ?? 0,
+    fps: details.type === 'video' ? (details.fps ?? 0) : 0,
+    codec: details.codec ?? 'unknown',
+    bitrate: details.bitrate ?? 0,
+    ...optional,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+const WORKSPACE_MARKER_MAX_BYTES = 64 * 1024
+
+/** Read at most one buffer's worth; a marker larger than the buffer is rejected by the caller. */
+async function readMarkerBytes(handle, buffer) {
+  let length = 0
+  while (length < buffer.length) {
+    const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length)
+    if (bytesRead === 0) break
+    length += bytesRead
+  }
+  return length
+}
+
+/**
+ * The file we read must still be the same inode, same size and same mtime we
+ * stat'ed before reading, and must not have become a symlink underneath us.
+ */
+function markerUnchanged({ before, after, pathAfter, length }) {
+  return (
+    pathAfter.isFile() &&
+    !pathAfter.isSymbolicLink() &&
+    before.dev === after.dev &&
+    before.ino === after.ino &&
+    before.size === after.size &&
+    before.mtimeMs === after.mtimeMs &&
+    after.dev === pathAfter.dev &&
+    after.ino === pathAfter.ino &&
+    length === after.size
+  )
+}
+
+function parseWorkspaceMarker(bytes) {
+  const value = JSON.parse(bytes.toString('utf8'))
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    typeof value.schemaVersion !== 'string' ||
+    value.schemaVersion.length === 0
+  )
+    return null
+  return { schemaVersion: value.schemaVersion, fingerprint: digest(bytes) }
+}
+
+/** A missing, unreadable or malformed marker is "no fingerprint", not an error. */
+function isAbsentMarker(error) {
+  return (
+    error.code === 'ENOENT' ||
+    error.code === 'ELOOP' ||
+    error.code === 'ENOTDIR' ||
+    error instanceof SyntaxError
+  )
 }
 
 export async function workspaceFingerprint(workspace) {
-  const maxBytes = 64 * 1024
   let handle
   try {
     const canonicalWorkspace = await fs.promises.realpath(workspace)
     const marker = path.join(canonicalWorkspace, '.freecut-workspace.json')
     handle = await fs.promises.open(marker, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0))
     const before = await handle.stat()
-    if (!before.isFile() || before.size === 0 || before.size > maxBytes) return null
-    const buffer = Buffer.allocUnsafe(maxBytes + 1)
-    let length = 0
-    while (length < buffer.length) {
-      const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length)
-      if (bytesRead === 0) break
-      length += bytesRead
-    }
-    if (length > maxBytes) return null
+    if (!before.isFile() || before.size === 0 || before.size > WORKSPACE_MARKER_MAX_BYTES)
+      return null
+    const buffer = Buffer.allocUnsafe(WORKSPACE_MARKER_MAX_BYTES + 1)
+    const length = await readMarkerBytes(handle, buffer)
+    if (length > WORKSPACE_MARKER_MAX_BYTES) return null
     const after = await handle.stat()
     const pathAfter = await fs.promises.lstat(marker)
-    if (
-      !pathAfter.isFile() ||
-      pathAfter.isSymbolicLink() ||
-      before.dev !== after.dev ||
-      before.ino !== after.ino ||
-      before.size !== after.size ||
-      before.mtimeMs !== after.mtimeMs ||
-      after.dev !== pathAfter.dev ||
-      after.ino !== pathAfter.ino ||
-      length !== after.size
-    )
-      return null
-    const bytes = buffer.subarray(0, length)
-    const value = JSON.parse(bytes.toString('utf8'))
-    if (
-      !value ||
-      typeof value !== 'object' ||
-      typeof value.schemaVersion !== 'string' ||
-      value.schemaVersion.length === 0
-    )
-      return null
-    return { schemaVersion: value.schemaVersion, fingerprint: digest(bytes) }
+    if (!markerUnchanged({ before, after, pathAfter, length })) return null
+    return parseWorkspaceMarker(buffer.subarray(0, length))
   } catch (error) {
-    if (
-      error.code === 'ENOENT' ||
-      error.code === 'ELOOP' ||
-      error.code === 'ENOTDIR' ||
-      error instanceof SyntaxError
-    )
-      return null
+    if (isAbsentMarker(error)) return null
     throw error
   } finally {
     await handle?.close().catch(() => {})
@@ -466,7 +497,7 @@ export async function workspaceFingerprint(workspace) {
 
 export const requestHashOf = (bytes) => bareDigest(digest(bytes))
 
-export async function verifyImportedResource(workspace, body) {
+async function verifyImportedResource(workspace, body) {
   const resource = await getMediaResource(workspace, body.mediaId)
   assertMatchingResource(resource, body)
   const source = resolveContained(

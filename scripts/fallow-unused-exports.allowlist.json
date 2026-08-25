@@ -246,16 +246,6 @@
       "reason": "Called through the canvas-audio namespace from export rendering."
     },
     {
-      "path": "src/features/export/utils/canvas-audio.ts",
-      "exportName": "hasAudioContent",
-      "reason": "Called through the canvas-audio namespace from export rendering."
-    },
-    {
-      "path": "src/features/export/utils/canvas-render-orchestrator.ts",
-      "exportName": "renderSingleFrame",
-      "reason": "Dynamically imported by thumbnail and timeline persistence flows."
-    },
-    {
       "path": "src/features/keyframes/utils/easing-presets.ts",
       "exportName": "areBezierPointsEqual",
       "reason": "unreviewed: carried over by the 2026-07-09 re-baseline; trace individually before deleting."
@@ -303,11 +293,6 @@
     {
       "path": "src/features/media-library/transcription/transcription-engine.ts",
       "exportName": "PARAKEET_MODEL",
-      "reason": "unreviewed: carried over by the 2026-07-09 re-baseline; trace individually before deleting."
-    },
-    {
-      "path": "src/features/media-library/transcription/transcription-engine.ts",
-      "exportName": "PARAKEET_SUPPORTED_LANGUAGES",
       "reason": "unreviewed: carried over by the 2026-07-09 re-baseline; trace individually before deleting."
     },
     {
@@ -609,6 +594,26 @@
       "path": "src/shared/utils/transcription-progress.ts",
       "exportName": "isModelStage",
       "reason": "unreviewed: carried over by the 2026-07-09 re-baseline; trace individually before deleting."
+    },
+    {
+      "path": "src/features/timeline/components/timeline-item/join-indicators.tsx",
+      "exportName": "JoinIndicators",
+      "reason": "upstream-owned: consumers render the ZoomGatedJoinIndicators / TimelineJoinIndicatorsZoomGate wrappers from this same module, so the inner component is dead in upstream's tree too. Kept verbatim so the file does not diverge from upstream."
+    },
+    {
+      "path": "src/features/timeline/utils/timeline-dom-density.ts",
+      "exportName": "DENSE_TIMELINE_ITEM_CULL_BUFFER_PX",
+      "reason": "upstream-owned constant with no consumer in upstream's tree either. Kept verbatim to avoid diverging from upstream."
+    },
+    {
+      "path": "src/features/timeline/utils/timeline-dom-density.ts",
+      "exportName": "COMPACT_TIMELINE_ITEM_MAX_WIDTH_PX",
+      "reason": "upstream-owned constant with no consumer in upstream's tree either. Kept verbatim to avoid diverging from upstream."
+    },
+    {
+      "path": "src/runtime/composition-runtime/hooks/use-player-compat.ts",
+      "exportName": "useCurrentFrame",
+      "reason": "upstream-owned compat shim over useBridgedCurrentFrame; every other occurrence of the name in the tree is a comment. Kept verbatim to avoid diverging from upstream."
     }
   ]
 }

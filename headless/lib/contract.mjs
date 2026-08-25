@@ -571,20 +571,23 @@ export const mediaProbeRequestSchema = z
     path: ['expectedRevision'],
   })
 
+/** No NUL, no backslashes, no absolute/UNC/drive paths, no empty or dot segments. */
+function refineWorkspaceRelativePath(value, ctx) {
+  const invalid =
+    value.includes('\0') ||
+    value.includes('\\') ||
+    value.startsWith('/') ||
+    /^[A-Za-z]:/.test(value) ||
+    value.startsWith('//') ||
+    value.split('/').some((part) => part === '' || part === '.' || part === '..')
+  if (invalid) ctx.addIssue({ code: 'custom', message: 'must be a safe workspace-relative path' })
+}
+
 const workspaceRelativeMediaPathSchema = z
   .string()
   .min(1)
   .max(1024)
-  .superRefine((value, ctx) => {
-    const invalid =
-      value.includes('\0') ||
-      value.includes('\\') ||
-      value.startsWith('/') ||
-      /^[A-Za-z]:/.test(value) ||
-      value.startsWith('//') ||
-      value.split('/').some((part) => part === '' || part === '.' || part === '..')
-    if (invalid) ctx.addIssue({ code: 'custom', message: 'must be a safe workspace-relative path' })
-  })
+  .superRefine(refineWorkspaceRelativePath)
 
 export const mediaImportRequestSchema = z
   .object({
@@ -746,7 +749,7 @@ const checkpointRecipeOperationSchema = z.discriminatedUnion('op', [
     .strict(),
 ])
 
-export const checkpointRecipeSchema = z
+const checkpointRecipeSchema = z
   .object({
     schemaVersion: z.literal(CHECKPOINT_RECIPE_SCHEMA_VERSION),
     operations: z.array(checkpointRecipeOperationSchema).min(1).max(1000),

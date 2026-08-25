@@ -231,7 +231,7 @@ export async function saveProjectResource(
   })
 }
 
-export function checkpointApplicationReceiptFor(project, operationId) {
+function checkpointApplicationReceiptFor(project, operationId) {
   return project?.checkpointApplicationReceipts?.[operationId] ?? null
 }
 
@@ -316,6 +316,74 @@ function localPidIsAlive(pid) {
   }
 }
 
+function readLockRecord(lockPath) {
+  try {
+    return JSON.parse(fs.readFileSync(lockPath, 'utf8'))
+  } catch {
+    throw new HttpError(503, 'WORKSPACE_LOCKED', 'Workspace writer lock is unreadable')
+  }
+}
+
+/** A lock is only breakable when its owner is a dead local process. */
+function assertLockOwnerIsGone(recorded) {
+  const localHost = !recorded.hostname || recorded.hostname === os.hostname()
+  const alive = localHost ? localPidIsAlive(recorded.pid) : null
+  if (alive !== false) {
+    throw new HttpError(
+      503,
+      'WORKSPACE_LOCKED',
+      alive
+        ? 'Workspace already has a live agent writer'
+        : 'Workspace writer cannot be confirmed stale',
+    )
+  }
+}
+
+function assertLockIsStale(recorded, { breakLock, staleGraceMs }) {
+  const age = Date.now() - Number(recorded.createdAt)
+  if (!breakLock && (!Number.isFinite(age) || age < staleGraceMs)) {
+    throw new HttpError(
+      503,
+      'WORKSPACE_LOCKED',
+      'Workspace writer lock is within the stale-lock grace period',
+    )
+  }
+}
+
+/**
+ * Take the abandoned lock by renaming it aside first: if the token changed
+ * underneath us another writer won the race, so we put it back and give up.
+ */
+async function reclaimStaleLock(dir, lockPath, recorded) {
+  const recoveryPath = path.join(dir, `writer.lock.recover.${process.pid}.${crypto.randomUUID()}`)
+  try {
+    await fs.promises.rename(lockPath, recoveryPath)
+    const claimed = JSON.parse(await fs.promises.readFile(recoveryPath, 'utf8'))
+    if (claimed.token !== recorded.token) {
+      await fs.promises.rename(recoveryPath, lockPath).catch(() => {})
+      throw new HttpError(503, 'WORKSPACE_LOCKED', 'Workspace writer changed during recovery')
+    }
+    await fs.promises.rm(recoveryPath, { force: true })
+    return await fs.promises.open(lockPath, 'wx', 0o600)
+  } catch (retryError) {
+    if (retryError.code === 'EEXIST')
+      throw new HttpError(503, 'WORKSPACE_LOCKED', 'Workspace writer lock was reacquired')
+    throw retryError
+  }
+}
+
+async function openWriterLock(dir, lockPath, options) {
+  try {
+    return await fs.promises.open(lockPath, 'wx', 0o600)
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+    const recorded = readLockRecord(lockPath)
+    assertLockOwnerIsGone(recorded)
+    assertLockIsStale(recorded, options)
+    return reclaimStaleLock(dir, lockPath, recorded)
+  }
+}
+
 export async function acquireWriterLock(
   workspace,
   { breakLock = false, staleGraceMs = 60_000 } = {},
@@ -323,58 +391,7 @@ export async function acquireWriterLock(
   const dir = path.join(workspace, '.freecut-headless')
   await fs.promises.mkdir(dir, { recursive: true })
   const lockPath = path.join(dir, 'writer.lock')
-  let handle
-  try {
-    handle = await fs.promises.open(lockPath, 'wx', 0o600)
-  } catch (error) {
-    if (error.code === 'EEXIST') {
-      let recorded
-      try {
-        recorded = JSON.parse(await fs.promises.readFile(lockPath, 'utf8'))
-      } catch {
-        throw new HttpError(503, 'WORKSPACE_LOCKED', 'Workspace writer lock is unreadable')
-      }
-      const localHost = !recorded.hostname || recorded.hostname === os.hostname()
-      const alive = localHost ? localPidIsAlive(recorded.pid) : null
-      if (alive !== false) {
-        throw new HttpError(
-          503,
-          'WORKSPACE_LOCKED',
-          alive
-            ? 'Workspace already has a live agent writer'
-            : 'Workspace writer cannot be confirmed stale',
-        )
-      }
-      const age = Date.now() - Number(recorded.createdAt)
-      if (!breakLock && (!Number.isFinite(age) || age < staleGraceMs)) {
-        throw new HttpError(
-          503,
-          'WORKSPACE_LOCKED',
-          'Workspace writer lock is within the stale-lock grace period',
-        )
-      }
-      const recoveryPath = path.join(
-        dir,
-        `writer.lock.recover.${process.pid}.${crypto.randomUUID()}`,
-      )
-      try {
-        await fs.promises.rename(lockPath, recoveryPath)
-        const claimed = JSON.parse(await fs.promises.readFile(recoveryPath, 'utf8'))
-        if (claimed.token !== recorded.token) {
-          await fs.promises.rename(recoveryPath, lockPath).catch(() => {})
-          throw new HttpError(503, 'WORKSPACE_LOCKED', 'Workspace writer changed during recovery')
-        }
-        await fs.promises.rm(recoveryPath, { force: true })
-        handle = await fs.promises.open(lockPath, 'wx', 0o600)
-      } catch (retryError) {
-        if (retryError.code === 'EEXIST')
-          throw new HttpError(503, 'WORKSPACE_LOCKED', 'Workspace writer lock was reacquired')
-        throw retryError
-      }
-    } else {
-      throw error
-    }
-  }
+  const handle = await openWriterLock(dir, lockPath, { breakLock, staleGraceMs })
   const token = crypto.randomUUID()
   await handle.writeFile(
     JSON.stringify({ pid: process.pid, hostname: os.hostname(), token, createdAt: Date.now() }),

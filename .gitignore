@@ -100,3 +100,6 @@ artifacts/
 !.agents/
 !.agents/skills/
 !.agents/skills/**
+
+# Headless coverage feed for the Fallow changed-health gate (npm run coverage:headless)
+.coverage/

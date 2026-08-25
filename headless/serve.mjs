@@ -378,7 +378,8 @@ async function main() {
   const runCheckpointPump = () => {
     checkpointPumpRequested = true
     if (checkpointPump) return checkpointPump
-    checkpointPump = (async () => {
+    /** Drains newly submitted checkpoint operations until none are left pending. */
+    const drainCheckpointQueue = async () => {
       do {
         checkpointPumpRequested = false
         while (queue.accepting) {
@@ -396,7 +397,8 @@ async function main() {
           }
         }
       } while (checkpointPumpRequested && queue.accepting)
-    })()
+    }
+    checkpointPump = drainCheckpointQueue()
       .catch((error) => {
         if (error.code !== 'SERVICE_SHUTTING_DOWN') {
           console.error('checkpoint pump failed:', error.message ?? error)
