@@ -171,6 +171,32 @@ test('queue rejects work beyond the configured waiting depth', async () => {
   assert.deepEqual(await Promise.all([first, second]), [1, 2])
 })
 
+test('capacity waiters resume after the bounded queue drains', async () => {
+  let release
+  const blocked = new Promise((resolve) => {
+    release = resolve
+  })
+  const queue = new OperationQueue({ maxQueueDepth: 0, recover: async () => {} })
+  const active = queue.enqueue(() => blocked, { timeoutMs: 500, kind: 'render' })
+  await Promise.resolve()
+  let capacityAvailable = false
+  const capacity = queue.waitForCapacity().then(() => {
+    capacityAvailable = true
+  })
+  assert.equal(capacityAvailable, false)
+  release('active')
+  assert.equal(await active, 'active')
+  await capacity
+  assert.equal(capacityAvailable, true)
+  assert.equal(
+    await queue.enqueue(async () => 'durable', {
+      timeoutMs: 500,
+      kind: 'checkpoint-operation',
+    }),
+    'durable',
+  )
+})
+
 test('shutdown drains idle and active queues and rejects new work', async () => {
   const idle = new OperationQueue({ maxQueueDepth: 1, recover: async () => {} })
   await idle.shutdown(100)

@@ -17,7 +17,7 @@ function normalizeProgress(value) {
   }
 }
 
-/** In-memory observability for the synchronous service API. */
+/** Process-local observability for the synchronous service API. */
 export class ServiceStatus {
   #activeOperations = new Map()
   #lastOperation = null

@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
+import { canonicalJsonBytes, qualifiedSha256 } from './contract.mjs'
 import { HttpError, assertSinglePathComponent, resolveContained } from './http-security.mjs'
 import { resolveMediaFile } from './workspace.mjs'
 
@@ -129,6 +130,15 @@ export async function getProjectResource(workspace, id) {
   return { id, revision: resource.revision, project: resource.value }
 }
 
+export function projectForEngine(project) {
+  const { checkpointApplicationReceipts: _internalReceipts, ...engineProject } = project
+  return engineProject
+}
+
+export function publicProjectResource(resource) {
+  return resource?.project ? { ...resource, project: projectForEngine(resource.project) } : resource
+}
+
 export async function listProjectResources(workspace) {
   const root = path.join(workspace, 'projects')
   const results = []
@@ -195,7 +205,15 @@ export async function saveProjectResource(
   return withResourceLock(`project:${id}`, async () => {
     const current = await getProjectResource(workspace, id)
     checkRevision(current.revision, expectedRevision, force)
-    const next = { ...project, id, createdAt: current.project.createdAt, updatedAt: Date.now() }
+    const next = {
+      ...project,
+      id,
+      createdAt: current.project.createdAt,
+      updatedAt: Date.now(),
+      ...(current.project.checkpointApplicationReceipts
+        ? { checkpointApplicationReceipts: current.project.checkpointApplicationReceipts }
+        : {}),
+    }
     const bytes = Buffer.from(`${JSON.stringify(next, null, 2)}\n`)
     await atomicWriteFile(projectFile(workspace, id), bytes, {
       beforeCommit: async () => {
@@ -210,6 +228,79 @@ export async function saveProjectResource(
       warnings.push('INDEX_REPAIR_REQUIRED')
     }
     return { id, revision: revisionOf(bytes), project: next, warnings }
+  })
+}
+
+export function checkpointApplicationReceiptFor(project, operationId) {
+  return project?.checkpointApplicationReceipts?.[operationId] ?? null
+}
+
+export async function saveProjectResourceWithCheckpointReceipt(
+  workspace,
+  id,
+  project,
+  { expectedRevision, receipt, afterCommit } = {},
+) {
+  assertPortableId(id, 'project id')
+  if (
+    !receipt ||
+    typeof receipt.operationId !== 'string' ||
+    typeof receipt.requestSha256 !== 'string' ||
+    typeof receipt.recipeSha256 !== 'string' ||
+    typeof receipt.priorRevision !== 'string'
+  ) {
+    throw new TypeError('A complete checkpoint application receipt is required')
+  }
+  if (receipt.priorRevision !== expectedRevision) {
+    throw new TypeError('Checkpoint receipt priorRevision must equal expectedRevision')
+  }
+  return withResourceLock(`project:${id}`, async () => {
+    const current = await getProjectResource(workspace, id)
+    checkRevision(current.revision, expectedRevision, false)
+    const existing = checkpointApplicationReceiptFor(current.project, receipt.operationId)
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(receipt)) {
+        throw new HttpError(
+          409,
+          'CHECKPOINT_RECEIPT_MISMATCH',
+          'Project contains a different receipt for this checkpoint operation',
+        )
+      }
+      return current
+    }
+    const nextEngineProject = {
+      ...projectForEngine(project),
+      id,
+      createdAt: current.project.createdAt,
+      updatedAt: Date.now(),
+    }
+    const committedReceipt = {
+      ...receipt,
+      appliedProjectSha256: qualifiedSha256(canonicalJsonBytes(nextEngineProject)),
+    }
+    const next = {
+      ...nextEngineProject,
+      checkpointApplicationReceipts: {
+        ...(current.project.checkpointApplicationReceipts ?? {}),
+        [receipt.operationId]: committedReceipt,
+      },
+    }
+    const bytes = Buffer.from(`${JSON.stringify(next, null, 2)}\n`)
+    const revision = revisionOf(bytes)
+    await atomicWriteFile(projectFile(workspace, id), bytes, {
+      beforeCommit: async () => {
+        const latest = await getProjectResource(workspace, id)
+        checkRevision(latest.revision, current.revision, false)
+      },
+    })
+    await afterCommit?.({ id, revision, project: next })
+    const warnings = []
+    try {
+      await withResourceLock('projects:index', () => rebuildIndex(workspace))
+    } catch {
+      warnings.push('INDEX_REPAIR_REQUIRED')
+    }
+    return { id, revision, project: next, receipt: committedReceipt, warnings }
   })
 }
 
