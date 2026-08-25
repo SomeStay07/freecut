@@ -33,6 +33,9 @@ jobs:
       - name: Install dependencies
         run: vp install
 
+      - name: Check Codex project contract
+        run: vp run check:codex-contract
+
       - name: Check feature boundaries
         run: vp run check:boundaries
 
@@ -79,6 +82,14 @@ jobs:
       # contracts. Reuses dist/ from Build and never requires WebGPU.
       - name: Portable headless contract suite
         run: npm run headless:test:portable
+        env:
+          # Collected here so the quality ratchet below can score headless code
+          # against real coverage instead of assuming zero; the suite is minutes
+          # long, so it must not run a second time just for coverage.
+          NODE_V8_COVERAGE: .coverage/v8
+
+      - name: Convert headless coverage for the ratchet
+        run: node scripts/headless-coverage.mjs --from .coverage/v8
 
       # Quality ratchet: fails only on dead code / complexity / duplication
       # INTRODUCED by the PR (gate new-only), never on inherited issues.
@@ -87,9 +98,9 @@ jobs:
       - name: Fallow quality ratchet
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        run: |
-          npm install -g fallow
-          fallow audit --base "origin/${{ github.base_ref }}" --gate new-only --ci
+        # Goes through the repo script so the pinned Fallow version and the
+        # headless coverage feed are the same ones developers get locally.
+        run: node scripts/check-fallow-changed-health.mjs --base "origin/${{ github.base_ref }}"
 
   # Repeatedly re-runs the preview-sync suite from cold to surface ordering /
   # stale-render flakes in the fast-scrub state machine. Kept OFF the common PR
