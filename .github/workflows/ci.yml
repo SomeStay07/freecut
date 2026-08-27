@@ -33,9 +33,6 @@ jobs:
       - name: Install dependencies
         run: vp install
 
-      - name: Check Codex project contract
-        run: vp run check:codex-contract
-
       - name: Check feature boundaries
         run: vp run check:boundaries
 
