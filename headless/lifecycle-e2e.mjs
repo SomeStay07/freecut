@@ -43,6 +43,12 @@ function generateToneWav(filePath) {
   fs.writeFileSync(filePath, wav)
 }
 
+/**
+ * The final-render flow needs a genuinely decodable clip, so this synthesises
+ * one with ffmpeg rather than hand-writing an MP4. ffmpeg is therefore a
+ * prerequisite of this suite; say so plainly instead of failing on a bare
+ * status assertion.
+ */
 function generateToneVideo(filePath) {
   const result = spawnSync(
     'ffmpeg',
@@ -70,6 +76,12 @@ function generateToneVideo(filePath) {
     ],
     { encoding: 'utf8' },
   )
+  if (result.error?.code === 'ENOENT' || result.status === null) {
+    throw new Error(
+      'ffmpeg is required by headless/lifecycle-e2e.mjs (it synthesises the clip the ' +
+        'final-render checkpoint renders). Install ffmpeg and re-run.',
+    )
+  }
   assert.equal(result.status, 0, result.stderr)
 }
 
