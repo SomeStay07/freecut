@@ -29,7 +29,7 @@ export interface SourceRangeFinding {
  * Find items whose source cut runs past the end of their media — the engine
  * pads the tail with black frames / silence without any warning.
  *
- * `sourceStart`/`sourceEnd` are in source-native fps (see CLAUDE.md); when
+ * `sourceStart`/`sourceEnd` are in source-native fps (see AGENTS.md); when
  * `sourceEnd` is absent the needed range is derived from the timeline duration
  * and speed. Media without a known duration is skipped.
  */
@@ -189,7 +189,9 @@ function unsupportedPresentationFinding(
       `Transition "${transition.id}" uses presentation "${transition.presentation}", which has no ` +
       `${gpuAvailable ? '' : 'Canvas2D '}implementation here — it renders as a HARD CUT, not a transition` +
       (gpuAvailable ? '' : '. Presets drawable without a GPU: ') +
-      (gpuAvailable ? '' : [...CANVAS_FALLBACK_PRESENTATIONS].filter((p) => p !== 'none').join(', ')),
+      (gpuAvailable
+        ? ''
+        : [...CANVAS_FALLBACK_PRESENTATIONS].filter((p) => p !== 'none').join(', ')),
   }
 }
 
