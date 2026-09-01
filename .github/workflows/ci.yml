@@ -78,6 +78,11 @@ jobs:
       - name: Build
         run: vp build
 
+      # lifecycle-e2e synthesises the clip its final-render checkpoint renders,
+      # and the runner image does not ship ffmpeg.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       # Portable Node, Chrome, edit-operation, and generated-media/audio
       # contracts. Reuses dist/ from Build and never requires WebGPU.
       # lifecycle-e2e synthesises the clip its final-render checkpoint renders,
